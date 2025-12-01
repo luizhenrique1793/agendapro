@@ -1,4 +1,3 @@
-
 import React from "react";
 import { HashRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Landing from "./pages/Landing";
@@ -18,7 +17,7 @@ import Settings from "./pages/admin/Settings";
 import Clients from "./pages/admin/Clients";
 import Professionals from "./pages/admin/Professionals";
 import BusinessPage from "./pages/BusinessPage";
-import { AppProvider, useApp } from "./store";
+import { AppProvider } from "./store";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { AdminRoute } from "./components/AdminRoute";
 
@@ -26,7 +25,7 @@ const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    return <div className="flex items-center justify-center h-screen">Carregando...</div>;
   }
 
   return user ? <>{children}</> : <Navigate to="/login" />;
@@ -41,49 +40,52 @@ const AppRoutes: React.FC = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/admin/login" element={<AdminLogin />} />
 
-      <Route path="/book" element={<BookingFlow />} />
-      <Route path="/barbearia-do-ze" element={<BusinessPage />} />
+      {/* Dynamic Public Routes */}
+      <Route path="/book/:slug" element={<BookingFlow />} />
+      <Route path="/p/:slug" element={<BusinessPage />} />
+
+      {/* Redirects & Fallbacks for old links */}
+      <Route path="/book" element={<Navigate to="/" replace />} />
+      <Route path="/barbearia-do-ze" element={<Navigate to="/p/barbearia-do-ze" replace />} />
 
       {/* --- Platform Admin Routes (Super Admin) --- */}
-
-      <Route
-        path="/admin/businesses"
-        element={
-          <PrivateRoute>
-            <Businesses />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/admin/users"
-        element={
-          <PrivateRoute>
-            <Users />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/admin/users/new"
-        element={
-          <PrivateRoute>
-            <UserForm />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/admin/reports"
-        element={
-          <PrivateRoute>
-            <Reports />
-          </PrivateRoute>
-        }
-      />
-
       <Route
         path="/admin"
         element={
           <AdminRoute>
             <PlatformDashboard />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/businesses"
+        element={
+          <AdminRoute>
+            <Businesses />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <AdminRoute>
+            <Users />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/users/new"
+        element={
+          <AdminRoute>
+            <UserForm />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/reports"
+        element={
+          <AdminRoute>
+            <Reports />
           </AdminRoute>
         }
       />
