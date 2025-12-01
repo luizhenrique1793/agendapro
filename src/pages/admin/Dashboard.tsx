@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   BarChart,
   Bar,
@@ -8,7 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { Calendar, Users, DollarSign, TrendingUp } from "lucide-react";
+import { Calendar, Users, DollarSign, TrendingUp, Copy, CheckCircle2, Link as LinkIcon } from "lucide-react";
 import { useApp } from "../../store";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 
@@ -48,6 +48,54 @@ const StatCard: React.FC<{
     </div>
   </div>
 );
+
+const BookingLinkCard: React.FC = () => {
+  const { currentBusiness } = useApp();
+  const [copySuccess, setCopySuccess] = useState(false);
+
+  if (!currentBusiness?.slug) {
+    return null; // Or a loading skeleton
+  }
+
+  const bookingLink = `${window.location.origin}/#/book/${currentBusiness.slug}`;
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(bookingLink);
+    setCopySuccess(true);
+    setTimeout(() => setCopySuccess(false), 2000);
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+      <h3 className="text-lg font-bold text-gray-900">Seu Link de Agendamento</h3>
+      <p className="mt-1 text-sm text-gray-500">
+        Compartilhe este link com seus clientes para que eles possam agendar online.
+      </p>
+      <div className="mt-4 flex items-center gap-2">
+        <div className="relative flex-1">
+          <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            readOnly
+            value={bookingLink}
+            className="block w-full rounded-lg border-gray-300 bg-gray-50 pl-9 text-sm text-gray-900"
+          />
+        </div>
+        <button
+          onClick={copyToClipboard}
+          className="flex shrink-0 items-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-500"
+        >
+          {copySuccess ? (
+            <CheckCircle2 className="mr-2 h-4 w-4" />
+          ) : (
+            <Copy className="mr-2 h-4 w-4" />
+          )}
+          {copySuccess ? "Copiado!" : "Copiar"}
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const Dashboard: React.FC = () => {
   const { appointments } = useApp();
@@ -92,6 +140,10 @@ const Dashboard: React.FC = () => {
             trend="+4%"
             positive={true}
           />
+        </div>
+
+        <div className="mt-8">
+          <BookingLinkCard />
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">

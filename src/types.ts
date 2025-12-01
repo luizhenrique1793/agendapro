@@ -1,4 +1,3 @@
-
 export enum AppointmentStatus {
   PENDING = "Pendente",
   CONFIRMED = "Confirmado",
@@ -12,15 +11,18 @@ export interface Service {
   duration: number; // in minutes
   price: number;
   description?: string;
+  business_id?: string;
 }
 
 export interface Professional {
   id: string;
   name: string;
+  role?: string;
   specialty?: string;
   email?: string;
   phone?: string;
   avatarUrl?: string;
+  business_id?: string;
   schedule?: {
     day: string;
     intervals: { start: string; end: string }[];
@@ -47,6 +49,7 @@ export interface Client {
   lastVisit?: string;
   status: "Ativo" | "Inativo";
   notes?: string;
+  business_id?: string;
 }
 
 export interface Appointment {
@@ -56,6 +59,7 @@ export interface Appointment {
   clientPhone: string;
   serviceId: string;
   professionalId: string;
+  business_id?: string;
   date: string; // ISO Date string YYYY-MM-DD
   time: string; // HH:mm
   status: AppointmentStatus;
@@ -73,6 +77,7 @@ export interface BusinessStats {
 export interface Business {
   id: string;
   name: string;
+  slug: string;
   type: string;
   city: string;
   status: "Ativo" | "Inativo";

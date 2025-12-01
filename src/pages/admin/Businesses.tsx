@@ -1,8 +1,28 @@
-
-import React from "react";
+import React, { useState } from "react";
 import { AdminSidebar } from "../../components/AdminSidebar";
 import { useApp } from "../../store";
-import { PlusCircle, Search, Edit2, Power, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { PlusCircle, Search, Edit2, Power, Eye, ChevronLeft, ChevronRight, Copy, CheckCircle2 } from "lucide-react";
+
+const CopyLinkButton: React.FC<{ slug: string }> = ({ slug }) => {
+  const [copied, setCopied] = useState(false);
+  const link = `${window.location.origin}/#/book/${slug}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-2 rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200"
+    >
+      {copied ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+      {copied ? "Copiado" : "Copiar Link"}
+    </button>
+  );
+};
 
 const Businesses: React.FC = () => {
   const { businesses } = useApp();
@@ -66,7 +86,7 @@ const Businesses: React.FC = () => {
               <tr>
                 <th scope="col" className="px-6 py-3">Nome</th>
                 <th scope="col" className="px-6 py-3">Tipo</th>
-                <th scope="col" className="px-6 py-3">Cidade</th>
+                <th scope="col" className="px-6 py-3">Link Público</th>
                 <th scope="col" className="px-6 py-3">Status</th>
                 <th scope="col" className="px-6 py-3">Ações</th>
               </tr>
@@ -81,7 +101,9 @@ const Businesses: React.FC = () => {
                     {business.name}
                   </td>
                   <td className="px-6 py-4">{business.type}</td>
-                  <td className="px-6 py-4">{business.city}</td>
+                  <td className="px-6 py-4">
+                    {business.slug && <CopyLinkButton slug={business.slug} />}
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center">
                       <div
