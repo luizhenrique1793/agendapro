@@ -1,40 +1,91 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useParams } from "react-router-dom";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
-  ChevronRight,
   Clock,
   CheckCircle2,
   User,
   Scissors,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
-import { useApp } from "../../store";
-import { Service, Professional, AppointmentStatus } from "../../types";
+import { supabase } from "../../lib/supabase";
+import { Service, Professional, AppointmentStatus, Business } from "../../types";
 
 const BookingFlow: React.FC = () => {
-  const { services, professionals, addAppointment, loading } = useApp();
+  const { slug } = useParams<{ slug: string }>();
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-600 border-t-transparent"></div>
-          <p className="mt-2 text-gray-500">Carregando...</p>
-        </div>
-      </div>
-    );
-  }
+  // State for data fetched based on slug
+  const [business, setBusiness] = useState<Business | null>(null);
+  const [services, setServices] = useState<Service[]>([]);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [loadingState, setLoadingState] = useState<"loading" | "success" | "error">("loading");
+
+  // State for the booking process steps
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedPro, setSelectedPro] = useState<Professional | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>("");
-  const [clientData, setClientData] = useState({
-    name: "",
-    phone: "",
-    email: "",
-  });
+  const [clientData, setClientData] = useState({ name: "", phone: "", email: "" });
+
+  useEffect(() => {
+    const fetchBusinessData = async () => {
+      if (!slug) {
+        setLoadingState("error");
+        return;
+      }
+
+      setLoadingState("loading");
+      // Reset all selections when the slug changes
+      setStep(1);
+      setSelectedService(null);
+      setSelectedPro(null);
+      setSelectedDate("");
+      setSelectedTime("");
+      setClientData({ name: "", phone: "", email: "" });
+
+      try {
+        // 1. Fetch business by slug
+        const { data: businessData, error: businessError } = await supabase
+          .from("businesses")
+          .select("*")
+          .eq("slug", slug)
+          .single();
+
+        if (businessError || !businessData) {
+          throw new Error("Business not found");
+        }
+        setBusiness(businessData);
+
+        // 2. Fetch services for this business
+        const { data: servicesData, error: servicesError } = await supabase
+          .from("services")
+          .select("*")
+          .eq("business_id", businessData.id);
+
+        if (servicesError) throw servicesError;
+        setServices(servicesData || []);
+
+        // 3. Fetch professionals for this business
+        const { data: prosData, error: prosError } = await supabase
+          .from("professionals")
+          .select("*")
+          .eq("business_id", businessData.id);
+
+        if (prosError) throw prosError;
+        setProfessionals(prosData || []);
+
+        setLoadingState("success");
+      } catch (error) {
+        console.error("Error fetching booking data:", error);
+        setLoadingState("error");
+      }
+    };
+
+    fetchBusinessData();
+  }, [slug]);
 
   const generateTimeSlots = () => {
     const slots = [];
@@ -46,18 +97,24 @@ const BookingFlow: React.FC = () => {
   };
 
   const handleBooking = async () => {
-    if (selectedService && selectedPro) {
+    if (selectedService && selectedPro && business) {
       try {
-        await addAppointment({
-          clientId: "guest-client", // Placeholder, not used in DB currently
-          clientName: clientData.name,
-          clientPhone: clientData.phone,
-          serviceId: selectedService.id,
-          professionalId: selectedPro.id,
-          date: selectedDate,
-          time: selectedTime,
-          status: AppointmentStatus.PENDING,
-        });
+        const { error } = await supabase.from("appointments").insert([
+          {
+            clientName: clientData.name,
+            clientPhone: clientData.phone,
+            serviceId: selectedService.id,
+            professionalId: selectedPro.id,
+            date: selectedDate,
+            time: selectedTime,
+            status: AppointmentStatus.PENDING,
+            business_id: business.id,
+            clientId: "guest-client", // Placeholder for guest bookings
+          },
+        ]);
+
+        if (error) throw error;
+
         setStep(5);
       } catch (error) {
         console.error("Error booking appointment:", error);
@@ -65,6 +122,34 @@ const BookingFlow: React.FC = () => {
       }
     }
   };
+
+  if (loadingState === "loading") {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary-600" />
+          <p className="mt-4 text-gray-600">Carregando informações do negócio...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadingState === "error" || !business) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50 text-center">
+        <div>
+          <AlertTriangle className="mx-auto h-12 w-12 text-red-500" />
+          <h2 className="mt-4 text-2xl font-bold text-gray-900">Negócio não encontrado</h2>
+          <p className="mt-2 text-gray-600">
+            O link de agendamento parece estar incorreto.
+          </p>
+          <Link to="/" className="mt-6 inline-block rounded-lg bg-primary-600 px-6 py-2 font-semibold text-white">
+            Voltar ao Início
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -74,7 +159,7 @@ const BookingFlow: React.FC = () => {
             <CalendarIcon className="h-6 w-6 text-primary-600" />
             <span className="text-xl font-bold text-gray-900">AgendaPro</span>
           </Link>
-          <span className="text-sm text-gray-500">Barbearia do João</span>
+          <span className="text-sm font-semibold text-gray-700">{business.name}</span>
         </div>
       </header>
 
