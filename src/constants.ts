@@ -107,8 +107,8 @@ export const MOCK_APPOINTMENTS: Appointment[] = [
   {
     id: "101",
     clientId: "c1",
-    cliente_name: "Ricardo Oliveira",
-    cliente_phone: "(11) 99999-9999",
+    client_name: "Ricardo Oliveira",
+    client_phone: "(11) 99999-9999",
     service_id: "3",
     professional_id: "1",
     date: new Date().toISOString().split("T")[0],
@@ -119,8 +119,8 @@ export const MOCK_APPOINTMENTS: Appointment[] = [
   {
     id: "102",
     clientId: "c2",
-    cliente_name: "Fernando Dias",
-    cliente_phone: "(11) 98888-8888",
+    client_name: "Fernando Dias",
+    client_phone: "(11) 98888-8888",
     service_id: "1",
     professional_id: "2",
     date: new Date().toISOString().split("T")[0],
@@ -131,8 +131,8 @@ export const MOCK_APPOINTMENTS: Appointment[] = [
   {
     id: "103",
     clientId: "c3",
-    cliente_name: "Ana Clara",
-    cliente_phone: "(11) 97777-7777",
+    client_name: "Ana Clara",
+    client_phone: "(11) 97777-7777",
     service_id: "1", // Assuming simple cut
     professional_id: "1",
     date: new Date().toISOString().split("T")[0],

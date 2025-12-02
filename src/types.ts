@@ -55,8 +55,8 @@ export interface Client {
 export interface Appointment {
   id: string;
   clientId?: string;
-  cliente_name: string;
-  cliente_phone: string;
+  client_name: string;
+  client_phone: string;
   service_id: string;
   professional_id: string;
   business_id?: string;
