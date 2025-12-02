@@ -92,7 +92,10 @@ const BookingFlow: React.FC = () => {
       setSelectedTime("");
 
       try {
-        const dateObj = new Date(`${selectedDate}T00:00:00`);
+        // Use a more robust way to create a local date object from YYYY-MM-DD string
+        const [year, month, day] = selectedDate.split('-').map(Number);
+        const dateObj = new Date(year, month - 1, day);
+
         const dayOfWeekIndex = dateObj.getDay();
         const dayNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
         const dayName = dayNames[dayOfWeekIndex];
