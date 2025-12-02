@@ -65,6 +65,9 @@ export interface Appointment {
   status: AppointmentStatus;
   notes?: string;
   created_at: string;
+  payment_method?: string;
+  amount_paid?: number;
+  paid_at?: string;
 }
 
 export interface BusinessStats {

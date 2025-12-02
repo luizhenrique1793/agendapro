@@ -14,6 +14,7 @@ interface AppContextType {
   currentBusiness: Business | null;
   addAppointment: (appt: Omit<Appointment, "id" | "created_at">) => Promise<void>;
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
+  completeAppointment: (id: string, paymentMethod: string, amountPaid: number) => Promise<void>;
   rescheduleAppointment: (id: string, newDate: string, newTime: string) => Promise<void>;
   addService: (service: Omit<Service, "id">) => Promise<void>;
   updateService: (service: Service) => Promise<void>;
@@ -203,6 +204,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await fetchData();
   };
 
+  const completeAppointment = async (id: string, paymentMethod: string, amountPaid: number) => {
+    const { error } = await supabase
+      .from('appointments')
+      .update({
+        status: AppointmentStatus.COMPLETED,
+        payment_method: paymentMethod,
+        amount_paid: amountPaid,
+        paid_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+    if (error) throw error;
+    await fetchData();
+  };
+
   const rescheduleAppointment = async (id: string, newDate: string, newTime: string) => {
     const { error } = await supabase
       .from('appointments')
@@ -232,6 +247,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteProfessional,
         addAppointment,
         updateAppointmentStatus,
+        completeAppointment,
         rescheduleAppointment,
         uploadProfessionalAvatar,
         addUser: () => { console.log("addUser called"); },
