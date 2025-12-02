@@ -189,7 +189,6 @@ const BookingFlow: React.FC = () => {
             time: selectedTime,
             status: AppointmentStatus.PENDING,
             business_id: business.id,
-            clientId: "guest-client",
           },
         ]);
 
