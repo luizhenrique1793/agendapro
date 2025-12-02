@@ -12,6 +12,7 @@ interface AppContextType {
   clients: Client[];
   loading: boolean;
   currentBusiness: Business | null;
+  updateBusiness: (business: Partial<Business>) => Promise<void>;
   addAppointment: (appt: Omit<Appointment, "id" | "created_at">) => Promise<void>;
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
   completeAppointment: (id: string, paymentMethod: string, amountPaid: number) => Promise<void>;
@@ -113,6 +114,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = async () => {
     await signOut();
+  };
+
+  const updateBusiness = async (businessUpdate: Partial<Business>) => {
+    if (!currentBusiness?.id) throw new Error("Negócio não identificado.");
+    const { error } = await supabase
+      .from('businesses')
+      .update(businessUpdate)
+      .eq('id', currentBusiness.id);
+    if (error) throw error;
+    await fetchData();
   };
 
   const addService = async (service: Omit<Service, "id">) => {
@@ -239,6 +250,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loading,
         currentBusiness,
         logout,
+        updateBusiness,
         addService,
         updateService,
         deleteService,

@@ -84,6 +84,13 @@ export interface Business {
   type: string;
   city: string;
   status: "Ativo" | "Inativo";
+  phone?: string;
+  address?: string;
+  working_hours?: {
+    day: string;
+    intervals: { start: string; end: string }[];
+    active: boolean;
+  }[];
 }
 
 export interface User {

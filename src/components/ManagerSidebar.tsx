@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -11,10 +10,12 @@ import {
   Users
 } from "lucide-react";
 import { useApp } from "../store";
+import { useAuth } from "../context/AuthContext";
 
 export const ManagerSidebar: React.FC = () => {
   const location = useLocation();
-  const { logout } = useApp();
+  const { logout, currentBusiness } = useApp();
+  const { user } = useAuth();
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -63,13 +64,13 @@ export const ManagerSidebar: React.FC = () => {
       <div className="border-t border-gray-200 p-4">
         <div className="mb-4 flex items-center px-4">
           <img
-            src="https://picsum.photos/40/40?random=50"
+            src={user?.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${user?.user_metadata?.full_name || 'A'}&background=random`}
             alt="Dono"
             className="h-8 w-8 rounded-full"
           />
           <div className="ml-3">
-            <p className="text-sm font-medium text-gray-900">João Silva</p>
-            <p className="text-xs text-gray-500">Barbearia do Zé</p>
+            <p className="text-sm font-medium text-gray-900">{user?.user_metadata?.full_name || "Usuário"}</p>
+            <p className="text-xs text-gray-500">{currentBusiness?.name || "Meu Negócio"}</p>
           </div>
         </div>
         <button
