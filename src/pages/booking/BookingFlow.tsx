@@ -181,10 +181,10 @@ const BookingFlow: React.FC = () => {
       try {
         const { error } = await supabase.from("appointments").insert([
           {
-            clientName: clientData.name,
-            clientPhone: clientData.phone,
-            serviceId: selectedService.id,
-            professionalId: selectedPro.id,
+            cliente_name: clientData.name,
+            cliente_phone: clientData.phone,
+            service_id: selectedService.id,
+            professional_id: selectedPro.id,
             date: selectedDate,
             time: selectedTime,
             status: AppointmentStatus.PENDING,

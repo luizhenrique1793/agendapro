@@ -196,11 +196,11 @@ const Dashboard: React.FC = () => {
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-600">
-                      {appt.clientName.charAt(0)}
+                      {appt.cliente_name.charAt(0)}
                     </div>
                     <div>
                       <p className="font-medium text-gray-900">
-                        {appt.clientName}
+                        {appt.cliente_name}
                       </p>
                       <p className="text-xs text-gray-500">
                         {appt.date} às {appt.time}

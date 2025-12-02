@@ -1,4 +1,3 @@
-
 import { Service, Professional, Appointment, AppointmentStatus, Business, User, Client } from "./types";
 
 export const MOCK_SERVICES: Service[] = [
@@ -108,38 +107,38 @@ export const MOCK_APPOINTMENTS: Appointment[] = [
   {
     id: "101",
     clientId: "c1",
-    clientName: "Ricardo Oliveira",
-    clientPhone: "(11) 99999-9999",
-    serviceId: "3",
-    professionalId: "1",
+    cliente_name: "Ricardo Oliveira",
+    cliente_phone: "(11) 99999-9999",
+    service_id: "3",
+    professional_id: "1",
     date: new Date().toISOString().split("T")[0],
     time: "10:00",
     status: AppointmentStatus.CONFIRMED,
-    createdAt: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   },
   {
     id: "102",
     clientId: "c2",
-    clientName: "Fernando Dias",
-    clientPhone: "(11) 98888-8888",
-    serviceId: "1",
-    professionalId: "2",
+    cliente_name: "Fernando Dias",
+    cliente_phone: "(11) 98888-8888",
+    service_id: "1",
+    professional_id: "2",
     date: new Date().toISOString().split("T")[0],
     time: "14:30",
     status: AppointmentStatus.PENDING,
-    createdAt: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   },
   {
     id: "103",
     clientId: "c3",
-    clientName: "Ana Clara",
-    clientPhone: "(11) 97777-7777",
-    serviceId: "1", // Assuming simple cut
-    professionalId: "1",
+    cliente_name: "Ana Clara",
+    cliente_phone: "(11) 97777-7777",
+    service_id: "1", // Assuming simple cut
+    professional_id: "1",
     date: new Date().toISOString().split("T")[0],
     time: "09:00",
     status: AppointmentStatus.COMPLETED,
-    createdAt: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   },
 ];
 

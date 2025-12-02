@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
@@ -92,9 +91,9 @@ const Schedule: React.FC = () => {
                     {appt.time}
                   </div>
                   <div className="mt-1 font-semibold text-gray-900">
-                    {appt.clientName}
+                    {appt.cliente_name}
                   </div>
-                  <div className="text-gray-600">{appt.clientPhone}</div>
+                  <div className="text-gray-600">{appt.cliente_phone}</div>
                 </button>
               ))}
             </div>
@@ -151,7 +150,7 @@ const Schedule: React.FC = () => {
                           onClick={() => handleAppointmentClick(appt)}
                           className="mb-1 w-full rounded border-l-2 border-primary-500 bg-primary-100 p-1 text-[10px] hover:bg-primary-200 text-left"
                         >
-                          <span className="font-bold">{appt.time}</span> {appt.clientName.split(" ")[0]}
+                          <span className="font-bold">{appt.time}</span> {appt.cliente_name.split(" ")[0]}
                         </button>
                       ))}
                     </div>
@@ -208,7 +207,7 @@ const Schedule: React.FC = () => {
                       onClick={() => handleAppointmentClick(appt)}
                       className="block w-full truncate rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-800 hover:bg-blue-200 text-left"
                     >
-                      {appt.time} {appt.clientName.split(" ")[0]}
+                      {appt.time} {appt.cliente_name.split(" ")[0]}
                     </button>
                   ))}
                 </div>
@@ -288,13 +287,13 @@ const Schedule: React.FC = () => {
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm font-medium text-gray-500">Cliente</p>
-                    <p className="text-base font-semibold text-gray-900">{selectedAppointment.clientName}</p>
-                    <p className="text-sm text-gray-600">{selectedAppointment.clientPhone}</p>
+                    <p className="text-base font-semibold text-gray-900">{selectedAppointment.cliente_name}</p>
+                    <p className="text-sm text-gray-600">{selectedAppointment.cliente_phone}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-500">Profissional</p>
                     <p className="text-base text-gray-900">
-                      {professionals.find(p => p.id === selectedAppointment.professionalId)?.name || 'N/A'}
+                      {professionals.find(p => p.id === selectedAppointment.professional_id)?.name || 'N/A'}
                     </p>
                   </div>
                   <div className="flex gap-6">

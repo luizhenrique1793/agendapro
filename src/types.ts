@@ -55,16 +55,16 @@ export interface Client {
 export interface Appointment {
   id: string;
   clientId?: string;
-  clientName: string;
-  clientPhone: string;
-  serviceId: string;
-  professionalId: string;
+  cliente_name: string;
+  cliente_phone: string;
+  service_id: string;
+  professional_id: string;
   business_id?: string;
   date: string; // ISO Date string YYYY-MM-DD
   time: string; // HH:mm
   status: AppointmentStatus;
   notes?: string;
-  createdAt: string;
+  created_at: string;
 }
 
 export interface BusinessStats {
