@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
@@ -22,7 +21,7 @@ const Clients: React.FC = () => {
   const filteredClients = clients.filter(
     (client) =>
       client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.email.toLowerCase().includes(searchTerm.toLowerCase())
+      (client.email && client.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleAddNew = () => {
@@ -46,14 +45,10 @@ const Clients: React.FC = () => {
       } else {
         // Create new
         addClient({
-          id: Math.random().toString(36).substr(2, 9),
-          name: formData.name!,
-          email: formData.email || "",
-          phone: formData.phone!,
-          status: formData.status as "Ativo" | "Inativo",
+          ...formData,
+          id: Math.random().toString(36).substr(2, 9), // This will be handled by DB
           totalVisits: 0,
-          lastVisit: "-",
-        });
+        } as Client);
       }
       setIsModalOpen(false);
     }
@@ -131,16 +126,18 @@ const Clients: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <Phone className="h-3 w-3" /> {client.phone}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Mail className="h-3 w-3" /> {client.email}
-                      </div>
+                      {client.email && (
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-3 w-3" /> {client.email}
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
                     {client.totalVisits}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                    {client.lastVisit || "-"}
+                    {client.lastVisit ? new Date(client.lastVisit.replace(/-/g, '/')).toLocaleDateString('pt-BR') : "-"}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4">
                     <span

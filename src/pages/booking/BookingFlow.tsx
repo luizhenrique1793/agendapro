@@ -180,28 +180,55 @@ const BookingFlow: React.FC = () => {
   }, [selectedDate, selectedPro, selectedService]);
 
   const handleBooking = async () => {
-    if (selectedService && selectedPro && business) {
-      try {
-        const { error } = await supabase.from("appointments").insert([
+    if (!selectedService || !selectedPro || !business) {
+      alert("Erro: informações do agendamento incompletas.");
+      return;
+    }
+  
+    try {
+      // 1. Upsert Client: Create or update client based on phone number for this business
+      const { data: client, error: upsertError } = await supabase
+        .from("clients")
+        .upsert(
           {
-            client_name: clientData.name,
-            client_phone: clientData.phone,
-            service_id: selectedService.id,
-            professional_id: selectedPro.id,
-            date: selectedDate,
-            time: selectedTime,
-            status: AppointmentStatus.PENDING,
+            name: clientData.name,
+            phone: clientData.phone,
+            email: clientData.email,
             business_id: business.id,
+            status: "Ativo",
           },
-        ]);
-
-        if (error) throw error;
-
-        setStep(5);
-      } catch (error) {
-        console.error("Error booking appointment:", error);
-        alert("Erro ao realizar agendamento. Tente novamente.");
-      }
+          {
+            onConflict: "phone,business_id",
+          }
+        )
+        .select()
+        .single();
+  
+      if (upsertError) throw upsertError;
+      if (!client) throw new Error("Não foi possível criar ou encontrar o cliente.");
+  
+      // 2. Insert Appointment and link it to the client
+      const { error: appointmentError } = await supabase.from("appointments").insert([
+        {
+          client_name: clientData.name,
+          client_phone: clientData.phone,
+          service_id: selectedService.id,
+          professional_id: selectedPro.id,
+          date: selectedDate,
+          time: selectedTime,
+          status: AppointmentStatus.PENDING,
+          business_id: business.id,
+          client_id: client.id, // Link to the client record
+        },
+      ]);
+  
+      if (appointmentError) throw appointmentError;
+  
+      // 3. Move to confirmation step
+      setStep(5);
+    } catch (error) {
+      console.error("Error booking appointment:", error);
+      alert("Erro ao realizar agendamento. Tente novamente.");
     }
   };
 
