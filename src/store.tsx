@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { Service, Professional, Appointment, Business, User, Client, ProfessionalBlock } from "./types";
+import { Service, Professional, Appointment, Business, User, Client, ProfessionalBlock, AppointmentStatus } from "./types";
 import { supabase } from "./lib/supabase";
 import { useAuth } from "./context/AuthContext";
 
@@ -12,8 +12,8 @@ interface AppContextType {
   clients: Client[];
   loading: boolean;
   currentBusiness: Business | null;
-  addAppointment: (appt: Omit<Appointment, "id" | "createdAt">) => Promise<void>;
-  updateAppointmentStatus: (id: string, status: string) => Promise<void>;
+  addAppointment: (appt: Omit<Appointment, "id" | "created_at">) => Promise<void>;
+  updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
   rescheduleAppointment: (id: string, newDate: string, newTime: string) => Promise<void>;
   addService: (service: Omit<Service, "id">) => Promise<void>;
   updateService: (service: Service) => Promise<void>;
@@ -94,9 +94,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAppointments(apptsData || []);
         const { data: clientsData } = await supabase.from('clients').select('*').eq('business_id', businessId);
         setClients(clientsData || []);
+      } else if (role !== 'admin') {
+        // If user is not an admin and has no business, clear the data to prevent showing stale info.
+        setServices([]);
+        setProfessionals([]);
+        setAppointments([]);
+        setClients([]);
+        setCurrentBusiness(null);
       }
-      // Note: Super Admin might need to fetch all data, but for now we focus on business manager context.
-      // The pages for super admin can fetch their own data if needed.
 
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -153,9 +158,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (error) throw error;
   };
 
-  // Other functions (addAppointment, etc.) would similarly rely on currentBusiness.id
-  // For brevity, only core CRUD is fully updated here. The pattern is the same.
-  // ... (rest of the functions can be implemented following the same pattern)
+  const addAppointment = async (appt: Omit<Appointment, "id" | "created_at">) => {
+    if (!currentBusiness?.id) throw new Error("Negócio não identificado.");
+    const { error } = await supabase.from('appointments').insert([{ ...appt, business_id: currentBusiness.id }]);
+    if (error) throw error;
+    await fetchData();
+  };
+
+  const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
+    const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
+    if (error) throw error;
+    await fetchData();
+  };
+
+  const rescheduleAppointment = async (id: string, newDate: string, newTime: string) => {
+    const { error } = await supabase
+      .from('appointments')
+      .update({ date: newDate, time: newTime, status: AppointmentStatus.PENDING })
+      .eq('id', id);
+    if (error) throw error;
+    await fetchData();
+  };
 
   return (
     <AppContext.Provider
@@ -175,10 +198,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addProfessional,
         updateProfessional,
         deleteProfessional,
-        // Dummy implementations for functions not fully refactored for brevity
-        addAppointment: async () => { console.log("addAppointment called"); },
-        updateAppointmentStatus: async () => { console.log("updateAppointmentStatus called"); },
-        rescheduleAppointment: async () => { console.log("rescheduleAppointment called"); },
+        addAppointment,
+        updateAppointmentStatus,
+        rescheduleAppointment,
         uploadProfessionalAvatar: async () => { console.log("uploadProfessionalAvatar called"); return ""; },
         addUser: () => { console.log("addUser called"); },
         addClient: () => { console.log("addClient called"); },
