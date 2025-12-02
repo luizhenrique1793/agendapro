@@ -6,11 +6,19 @@ import { Appointment } from "../../types";
 
 type ViewType = "day" | "week" | "month";
 
+// Helper para obter a data no formato YYYY-MM-DD no fuso horário local, evitando erros de UTC.
+const toLocalDateString = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const Schedule: React.FC = () => {
   const { appointments, rescheduleAppointment, professionals } = useApp();
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isRescheduling, setIsRescheduling] = useState(false);
-  const [view, setView] = useState<ViewType>("day");
+  const [view, setView] = useState<ViewType>("month"); // Padrão para visão mensal
   const [currentDate, setCurrentDate] = useState(new Date());
 
   // Reschedule Form State
@@ -65,7 +73,7 @@ const Schedule: React.FC = () => {
   // --- Views Components ---
 
   const DayView = () => {
-    const dateStr = currentDate.toISOString().split("T")[0];
+    const dateStr = toLocalDateString(currentDate);
     return (
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
         {timeSlots.map((hour) => (
@@ -129,8 +137,8 @@ const Schedule: React.FC = () => {
 
           {/* Days Columns */}
           {weekDays.map((day) => {
-            const dateStr = day.toISOString().split("T")[0];
-            const isToday = new Date().toDateString() === day.toDateString();
+            const dateStr = toLocalDateString(day);
+            const isToday = toLocalDateString(new Date()) === dateStr;
             return (
               <div key={dateStr} className="col-span-1">
                 <div className={`flex h-12 flex-col items-center justify-center border-b border-gray-200 ${isToday ? 'bg-primary-50' : 'bg-gray-50'}`}>
@@ -191,9 +199,9 @@ const Schedule: React.FC = () => {
             if (!day) return <div key={`empty-${idx}`} className="border-b border-r border-gray-100 bg-gray-50/30 h-32"></div>;
 
             const dateObj = new Date(year, month, day);
-            const dateStr = dateObj.toISOString().split("T")[0];
+            const dateStr = toLocalDateString(dateObj);
             const dayAppts = getAppointmentsForDate(dateStr);
-            const isToday = new Date().toDateString() === dateObj.toDateString();
+            const isToday = toLocalDateString(new Date()) === dateStr;
 
             return (
               <div key={day} className="flex h-32 flex-col border-b border-r border-gray-100 p-2 hover:bg-gray-50 transition-colors">
@@ -300,7 +308,7 @@ const Schedule: React.FC = () => {
                     <div>
                       <p className="text-sm font-medium text-gray-500">Data</p>
                       <p className="text-base text-gray-900">
-                        {new Date(selectedAppointment.date).toLocaleDateString('pt-BR')}
+                        {new Date(selectedAppointment.date).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
                       </p>
                     </div>
                     <div>
