@@ -30,6 +30,10 @@ const BookingFlow: React.FC = () => {
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [clientData, setClientData] = useState({ name: "", phone: "", email: "" });
 
+  // State for availability
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
   useEffect(() => {
     const fetchBusinessData = async () => {
       if (!slug) {
@@ -38,7 +42,6 @@ const BookingFlow: React.FC = () => {
       }
 
       setLoadingState("loading");
-      // Reset all selections when the slug changes
       setStep(1);
       setSelectedService(null);
       setSelectedPro(null);
@@ -47,34 +50,25 @@ const BookingFlow: React.FC = () => {
       setClientData({ name: "", phone: "", email: "" });
 
       try {
-        // 1. Fetch business by slug
         const { data: businessData, error: businessError } = await supabase
           .from("businesses")
           .select("*")
           .eq("slug", slug)
           .single();
 
-        if (businessError || !businessData) {
-          throw new Error("Business not found");
-        }
+        if (businessError || !businessData) throw new Error("Business not found");
         setBusiness(businessData);
 
-        // 2. Fetch services for this business
-        const { data: servicesData, error: servicesError } = await supabase
+        const { data: servicesData } = await supabase
           .from("services")
           .select("*")
           .eq("business_id", businessData.id);
-
-        if (servicesError) throw servicesError;
         setServices(servicesData || []);
 
-        // 3. Fetch professionals for this business
-        const { data: prosData, error: prosError } = await supabase
+        const { data: prosData } = await supabase
           .from("professionals")
           .select("*")
           .eq("business_id", businessData.id);
-
-        if (prosError) throw prosError;
         setProfessionals(prosData || []);
 
         setLoadingState("success");
@@ -87,14 +81,109 @@ const BookingFlow: React.FC = () => {
     fetchBusinessData();
   }, [slug]);
 
-  const generateTimeSlots = () => {
-    const slots = [];
-    for (let i = 9; i <= 18; i++) {
-      slots.push(`${i < 10 ? "0" + i : i}:00`);
-      slots.push(`${i < 10 ? "0" + i : i}:30`);
-    }
-    return slots;
-  };
+  // Effect to calculate available slots when dependencies change
+  useEffect(() => {
+    const calculateAvailableSlots = async () => {
+      if (!selectedDate || !selectedPro || !selectedService) {
+        setAvailableSlots([]);
+        return;
+      }
+
+      setLoadingSlots(true);
+      setSelectedTime(""); // Reset time when date changes
+
+      try {
+        // 1. Get professional's schedule for the selected day of the week
+        const dateObj = new Date(`${selectedDate}T00:00:00`); // Avoid timezone issues
+        const dayOfWeekIndex = dateObj.getDay();
+        const dayNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+        const dayName = dayNames[dayOfWeekIndex];
+        
+        const proSchedule = selectedPro.schedule?.find(s => s.day === dayName);
+
+        if (!proSchedule || !proSchedule.active || proSchedule.intervals.length === 0) {
+          setAvailableSlots([]);
+          setLoadingSlots(false);
+          return;
+        }
+
+        // 2. Fetch existing appointments and blocks for that day
+        const { data: appointments } = await supabase
+          .from("appointments")
+          .select("time, service_id(duration)")
+          .eq("professional_id", selectedPro.id)
+          .eq("date", selectedDate);
+
+        const { data: blocks } = await supabase
+          .from("professional_blocks")
+          .select("start_time, end_time")
+          .eq("professional_id", selectedPro.id)
+          .lte("start_date", selectedDate)
+          .gte("end_date", selectedDate);
+
+        // Helper to convert HH:mm to minutes from midnight
+        const timeToMinutes = (time: string) => {
+          const [hours, minutes] = time.split(':').map(Number);
+          return hours * 60 + minutes;
+        };
+
+        // Create a list of all booked time ranges in minutes
+        const bookedRanges = (appointments || []).map((a: any) => {
+          const start = timeToMinutes(a.time);
+          const end = start + a.service_id.duration;
+          return { start, end };
+        });
+
+        (blocks || []).forEach(b => {
+            // If a block is for the whole day
+            if (!b.start_time || !b.end_time) {
+                bookedRanges.push({ start: 0, end: 24 * 60 });
+            } else {
+                bookedRanges.push({ start: timeToMinutes(b.start_time), end: timeToMinutes(b.end_time) });
+            }
+        });
+
+        // 3. Generate potential slots and check for availability
+        const potentialSlots: string[] = [];
+        const serviceDuration = selectedService.duration;
+        const slotInterval = 15; // Check for a slot every 15 minutes
+
+        proSchedule.intervals.forEach(interval => {
+          let currentMinute = timeToMinutes(interval.start);
+          const endMinute = timeToMinutes(interval.end);
+
+          while (currentMinute + serviceDuration <= endMinute) {
+            const slotStart = currentMinute;
+            const slotEnd = currentMinute + serviceDuration;
+
+            // Check for overlap with any booked range
+            const isOverlapping = bookedRanges.some(range => 
+              slotStart < range.end && slotEnd > range.start
+            );
+
+            if (!isOverlapping) {
+              const hours = Math.floor(slotStart / 60).toString().padStart(2, '0');
+              const minutes = (slotStart % 60).toString().padStart(2, '0');
+              potentialSlots.push(`${hours}:${minutes}`);
+            }
+            
+            currentMinute += slotInterval;
+          }
+        });
+
+        setAvailableSlots(potentialSlots);
+
+      } catch (error) {
+        console.error("Error calculating slots:", error);
+        setAvailableSlots([]);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+
+    calculateAvailableSlots();
+  }, [selectedDate, selectedPro, selectedService]);
+
 
   const handleBooking = async () => {
     if (selectedService && selectedPro && business) {
@@ -278,10 +367,7 @@ const BookingFlow: React.FC = () => {
                     type="date"
                     min={new Date().toISOString().split("T")[0]}
                     value={selectedDate}
-                    onChange={(e) => {
-                      setSelectedDate(e.target.value);
-                      setSelectedTime("");
-                    }}
+                    onChange={(e) => setSelectedDate(e.target.value)}
                     className="w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
                   />
                 </div>
@@ -289,21 +375,41 @@ const BookingFlow: React.FC = () => {
                   <label className="mb-2 block text-sm font-medium text-gray-700">
                     Horários disponíveis
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {generateTimeSlots().map((time) => (
-                      <button
-                        key={time}
-                        disabled={!selectedDate}
-                        onClick={() => setSelectedTime(time)}
-                        className={`rounded-lg py-2 text-sm font-medium transition-colors ${selectedTime === time
-                          ? "bg-primary-600 text-white"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-                          }`}
-                      >
-                        {time}
-                      </button>
-                    ))}
-                  </div>
+                  {loadingSlots ? (
+                    <div className="flex h-full items-center justify-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-primary-600" />
+                    </div>
+                  ) : selectedDate && availableSlots.length > 0 ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      {availableSlots.map((time) => (
+                        <button
+                          key={time}
+                          onClick={() => setSelectedTime(time)}
+                          className={`rounded-lg py-2 text-sm font-medium transition-colors ${selectedTime === time
+                            ? "bg-primary-600 text-white"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            }`}
+                        >
+                          {time}
+                        </button>
+                      ))}
+                    </div>
+                  ) : selectedDate ? (
+                    <div className="flex flex-col items-center justify-center rounded-lg bg-gray-50 p-4 text-center">
+                      <p className="text-sm font-semibold text-gray-700">
+                        Nenhum horário disponível.
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Por favor, selecione outra data.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center rounded-lg bg-gray-50 p-4 text-center">
+                      <p className="text-sm text-gray-500">
+                        Selecione uma data para ver os horários.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="mt-8 flex justify-end">
