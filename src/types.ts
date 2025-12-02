@@ -21,7 +21,7 @@ export interface Professional {
   specialty?: string;
   email?: string;
   phone?: string;
-  avatarUrl?: string;
+  avatar_url?: string;
   business_id?: string;
   schedule?: {
     day: string;

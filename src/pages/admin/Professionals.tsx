@@ -35,14 +35,14 @@ const Professionals: React.FC = () => {
         name: string;
         email: string;
         phone: string;
-        avatarUrl: string;
+        avatar_url: string;
         specialty: string;
         schedule: { day: string; intervals: { start: string; end: string }[]; active: boolean }[];
     }>({
         name: "",
         email: "",
         phone: "",
-        avatarUrl: "",
+        avatar_url: "",
         specialty: "",
         schedule: [
             { day: "Segunda", intervals: [{ start: "09:00", end: "12:00" }, { start: "13:00", end: "18:00" }], active: true },
@@ -84,7 +84,7 @@ const Professionals: React.FC = () => {
                 name: pro.name,
                 email: pro.email || "",
                 phone: pro.phone || "",
-                avatarUrl: pro.avatarUrl || "",
+                avatar_url: pro.avatar_url || "",
                 specialty: pro.specialty || "",
                 schedule: pro.schedule || [
                     { day: "Segunda", intervals: [{ start: "09:00", end: "12:00" }, { start: "13:00", end: "18:00" }], active: true },
@@ -102,7 +102,7 @@ const Professionals: React.FC = () => {
                 name: "",
                 email: "",
                 phone: "",
-                avatarUrl: "",
+                avatar_url: "",
                 specialty: "",
                 schedule: [
                     { day: "Segunda", intervals: [{ start: "09:00", end: "12:00" }, { start: "13:00", end: "18:00" }], active: true },
@@ -125,7 +125,7 @@ const Professionals: React.FC = () => {
             setUploading(true);
             const file = e.target.files[0];
             const url = await uploadProfessionalAvatar(file);
-            setFormData(prev => ({ ...prev, avatarUrl: url }));
+            setFormData(prev => ({ ...prev, avatar_url: url }));
         } catch (error) {
             console.error("Error uploading avatar:", error);
             alert("Erro ao fazer upload da imagem.");
@@ -283,9 +283,9 @@ const Professionals: React.FC = () => {
                             </div>
 
                             <div className="mb-4 h-24 w-24 overflow-hidden rounded-full bg-gray-100">
-                                {pro.avatarUrl ? (
+                                {pro.avatar_url ? (
                                     <img
-                                        src={pro.avatarUrl}
+                                        src={pro.avatar_url}
                                         alt={pro.name}
                                         className="h-full w-full object-cover"
                                     />
@@ -390,9 +390,9 @@ const Professionals: React.FC = () => {
                                                     Foto
                                                 </label>
                                                 <div className="mt-1 flex items-center gap-4">
-                                                    {formData.avatarUrl && (
+                                                    {formData.avatar_url && (
                                                         <img
-                                                            src={formData.avatarUrl}
+                                                            src={formData.avatar_url}
                                                             alt="Preview"
                                                             className="h-12 w-12 rounded-full object-cover"
                                                         />
