@@ -162,7 +162,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const filePath = `public/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
-      .from('avatars')
+      .from('professional-avatars')
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: false,
@@ -174,7 +174,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const { data } = supabase.storage
-      .from('avatars')
+      .from('professional-avatars')
       .getPublicUrl(filePath);
 
     if (!data.publicUrl) {
