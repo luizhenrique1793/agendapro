@@ -152,6 +152,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetchData();
   };
 
+  const uploadProfessionalAvatar = async (file: File): Promise<string> => {
+    if (!file) {
+      throw new Error("Nenhum arquivo selecionado.");
+    }
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `public/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error('Error uploading avatar:', uploadError);
+      throw uploadError;
+    }
+
+    const { data } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(filePath);
+
+    if (!data.publicUrl) {
+      throw new Error("Não foi possível obter a URL pública do avatar.");
+    }
+
+    return data.publicUrl;
+  };
+
   const addProfessionalBlock = async (block: Omit<ProfessionalBlock, "id">) => {
     if (!currentBusiness?.id) throw new Error("Negócio não identificado.");
     const { error } = await supabase.from('professional_blocks').insert([{ ...block, business_id: currentBusiness.id }]);
@@ -201,7 +233,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addAppointment,
         updateAppointmentStatus,
         rescheduleAppointment,
-        uploadProfessionalAvatar: async () => { console.log("uploadProfessionalAvatar called"); return ""; },
+        uploadProfessionalAvatar,
         addUser: () => { console.log("addUser called"); },
         addClient: () => { console.log("addClient called"); },
         updateClient: () => { console.log("updateClient called"); },
