@@ -92,9 +92,9 @@ const BookingFlow: React.FC = () => {
       setSelectedTime("");
 
       try {
-        // Use a more robust way to create a local date object from YYYY-MM-DD string
-        const [year, month, day] = selectedDate.split('-').map(Number);
-        const dateObj = new Date(year, month - 1, day);
+        // Replace dashes with slashes to ensure the date is parsed in the local timezone, not UTC.
+        // new Date('2024-12-05') is often treated as UTC midnight, which can be the previous day in some timezones.
+        const dateObj = new Date(selectedDate.replace(/-/g, '/'));
 
         const dayOfWeekIndex = dateObj.getDay();
         const dayNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
