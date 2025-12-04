@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
 import { supabase } from "../../lib/supabase";
-import { Save, Loader2, MessageCircle, CheckCircle2, AlertCircle, Wifi, WifiOff, Send, Phone, RefreshCw } from "lucide-react";
+import { Save, Loader2, MessageCircle, CheckCircle2, AlertCircle, Wifi, WifiOff, Send, Phone, RefreshCw, AlertTriangle, Bug } from "lucide-react";
 import { EvolutionApiConfig } from "../../types";
 
 const WhatsappSettings: React.FC = () => {
@@ -17,6 +17,7 @@ const WhatsappSettings: React.FC = () => {
   const [status, setStatus] = useState<"idle" | "testing" | "connected" | "disconnected" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<any>(null);
 
   // Test Message State
   const [testPhone, setTestPhone] = useState("");
@@ -31,9 +32,8 @@ const WhatsappSettings: React.FC = () => {
           instanceName: currentBusiness.evolution_api_config.instanceName || ""
       });
       
-      // Se tiver configuração salva, assumimos um estado inicial neutro, mas indicando que existe config
       if (currentBusiness.evolution_api_config.instanceName) {
-         // Não forçamos o status para connected para não enganar, mas o usuário pode testar
+         // Config exists
       }
     }
   }, [currentBusiness]);
@@ -41,14 +41,35 @@ const WhatsappSettings: React.FC = () => {
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsSaving(true);
+    setSaveError(null);
+
+    // Debug log
+    console.log("---------------- DEBUG START ----------------");
+    console.log("Tentando salvar configuração para o negócio ID:", currentBusiness?.id);
+    console.log("Dados atuais do negócio:", currentBusiness);
+    console.log("Payload a ser enviado:", config);
+
     try {
+        if (!currentBusiness?.id) {
+            throw new Error("ID do negócio não encontrado. Verifique se você está logado e vinculado a um negócio.");
+        }
+
         await updateBusiness({ evolution_api_config: config });
         alert("Configurações salvas com sucesso!");
     } catch (error: any) {
-        console.error("Erro ao salvar:", error);
-        alert(`Erro ao salvar configurações: ${error.message}`);
+        console.error("ERRO CRÍTICO AO SALVAR:", error);
+        
+        // Estrutura o erro para exibição
+        setSaveError({
+            message: error.message || "Erro desconhecido",
+            details: error.details || null,
+            hint: error.hint || null,
+            code: error.code || null,
+            stack: error.stack || null
+        });
     } finally {
         setIsSaving(false);
+        console.log("---------------- DEBUG END ----------------");
     }
   };
 
@@ -62,7 +83,7 @@ const WhatsappSettings: React.FC = () => {
         body: config
       });
 
-      if (error) throw new Error("Falha ao comunicar com o servidor de teste.");
+      if (error) throw new Error(`Erro na Edge Function: ${error.message}`);
       
       if (!data.success) {
         setStatus("error");
@@ -137,10 +158,45 @@ const WhatsappSettings: React.FC = () => {
              </div>
           </div>
 
+          {/* Debug Error Box */}
+          {saveError && (
+            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-900 shadow-sm animate-in fade-in slide-in-from-top-2">
+                <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-6 w-6 shrink-0 text-red-600" />
+                    <div className="flex-1 overflow-hidden">
+                        <h3 className="text-lg font-bold text-red-800">Erro ao Salvar Configurações</h3>
+                        <p className="mt-1 font-medium">{saveError.message}</p>
+                        
+                        <div className="mt-3 rounded bg-white/50 p-3 text-xs font-mono">
+                            {saveError.code && <p><strong>Code:</strong> {saveError.code}</p>}
+                            {saveError.details && <p><strong>Details:</strong> {saveError.details}</p>}
+                            {saveError.hint && <p><strong>Hint:</strong> {saveError.hint}</p>}
+                            <p className="mt-2 text-gray-500">Abra o console do navegador (F12) para ver o log completo.</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => setSaveError(null)}
+                        className="text-red-500 hover:text-red-700"
+                    >
+                        Fechar
+                    </button>
+                </div>
+            </div>
+          )}
+
           <div className="grid gap-6">
             {/* Config Card */}
             <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-                <h2 className="mb-4 text-lg font-bold text-gray-900">Configuração da Instância</h2>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-bold text-gray-900">Configuração da Instância</h2>
+                    {currentBusiness?.id ? (
+                        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">ID: {currentBusiness.id.slice(0, 8)}...</span>
+                    ) : (
+                        <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded flex items-center gap-1">
+                            <Bug className="h-3 w-3" /> Sem ID de Negócio
+                        </span>
+                    )}
+                </div>
                 
                 <form className="space-y-6" onSubmit={(e) => handleSave(e)}>
                 <div className="grid gap-6 md:grid-cols-2">
