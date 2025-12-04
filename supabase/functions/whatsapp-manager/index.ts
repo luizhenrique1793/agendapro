@@ -18,20 +18,19 @@ const evolutionClient = {
     }
     const response = await fetch(url, options);
     
-    // Evolution API sometimes returns 400/404/500 but with JSON body error.
-    // Try to parse JSON even on error to get message.
+    // Tratamento de erro aprimorado para evitar 500 inesperados
     const responseText = await response.text();
     let responseData = {};
     try {
         responseData = responseText ? JSON.parse(responseText) : {};
     } catch (e) {
-        console.error("Error parsing response JSON:", e);
+        console.error("Error parsing response JSON from Evolution:", e);
     }
 
     if (!response.ok) {
       console.error(`Evolution API Error (${response.status}):`, responseText);
-      // Return the error message from Evolution if available
-      const msg = responseData.response?.message || responseData.message || responseText || `Error ${response.status}`;
+      const msg = responseData.response?.message || responseData.message || responseText || `Evolution API Error ${response.status}`;
+      // Lança erro legível para ser devolvido ao frontend
       throw new Error(msg);
     }
     
@@ -42,8 +41,9 @@ const evolutionClient = {
     const webhookUrl = `${appUrl}/api/webhooks/whatsapp`;
     return this.request('/instance/create', 'POST', {
       instanceName: name,
-      qrcode: false, // Don't generate QR on create
+      qrcode: false,
       webhook: webhookUrl,
+      integration: "WHATSAPP-BAILEYS" 
     }, apiKey, apiUrl);
   },
 
@@ -89,53 +89,20 @@ serve(async (req) => {
       throw new Error("Usuário não autenticado ou sem negócio vinculado.");
     }
     
-    // Normalize instance name
-    const instanceName = `business_${businessId.replace(/-/g, '')}`;
-
-    // --- GET: Check Status ---
-    if (req.method === 'GET') {
-      let evolutionState = null;
-      try {
-        evolutionState = await evolutionClient.getConnectionState(instanceName, EVOLUTION_API_KEY, EVOLUTION_API_URL);
-      } catch (error) {
-        // If 404/not found in Evolution, sync DB
-        if (error.message.includes('not found') || error.message.includes('404')) {
-             await supabase.from('whatsapp_instances').delete().eq('business_id', businessId);
-             return new Response(JSON.stringify({ status: 'not_found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        // If fetching status fails for other reasons, keep DB as is but return error? 
-        // Or assume "disconnected". Let's assume disconnected to allow UI to retry.
-      }
-
-      const currentState = evolutionState?.instance?.state || 'disconnected';
-      
-      // We don't necessarily get QR code in connectionState unless we call connect.
-      // So we update status only.
-      
-      const updatedData: any = { status: currentState };
-      if (currentState === 'open') {
-          updatedData.phone_number = evolutionState?.instance?.owner?.replace('@s.whatsapp.net', '');
-          updatedData.qr_code = null; // Clear QR if connected
-      }
-
-      const { data: upsertedInstance } = await supabase
-        .from('whatsapp_instances')
-        .update(updatedData)
-        .eq('business_id', businessId)
-        .select()
-        .single();
-        
-      return new Response(JSON.stringify(upsertedInstance || { status: currentState }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    // --- POST: Create Instance (No QR) ---
+    // --- POST: Create Instance ---
     if (req.method === 'POST') {
+      const { instanceName } = await req.json();
+      
+      if (!instanceName) {
+        throw new Error("O nome da instância é obrigatório.");
+      }
+
       const evolutionData = await evolutionClient.createInstance(instanceName, EVOLUTION_API_KEY, EVOLUTION_API_URL, APP_URL);
       
       const newInstance = {
         business_id: businessId,
-        instance_name: instanceName,
-        api_key: evolutionData?.hash?.apikey || evolutionData?.apikey, // Check both possibilities
+        instance_name: instanceName, // Usa o nome fornecido pelo usuário
+        api_key: evolutionData?.hash?.apikey || evolutionData?.apikey,
         status: 'created',
         qr_code: null
       };
@@ -146,19 +113,59 @@ serve(async (req) => {
       return new Response(JSON.stringify(data), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Para as outras rotas (GET, PUT, DELETE), precisamos saber o nome da instância que está no banco
+    const { data: existingInstance } = await supabase.from('whatsapp_instances').select('instance_name').eq('business_id', businessId).single();
+    // Se não tiver instância no banco e tentar GET/PUT/DELETE, retorna erro (exceto GET que trata not_found)
+    
+    // --- GET: Check Status ---
+    if (req.method === 'GET') {
+      if (!existingInstance) {
+          return new Response(JSON.stringify({ status: 'not_found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const instanceName = existingInstance.instance_name;
+      let evolutionState = null;
+      try {
+        evolutionState = await evolutionClient.getConnectionState(instanceName, EVOLUTION_API_KEY, EVOLUTION_API_URL);
+      } catch (error) {
+         // Se a instância não existe mais na Evolution, limpamos do banco
+         if (error.message.includes('not found') || error.message.includes('404')) {
+             await supabase.from('whatsapp_instances').delete().eq('business_id', businessId);
+             return new Response(JSON.stringify({ status: 'not_found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+         }
+         // Se for outro erro, retornamos o erro para debug
+         throw error;
+      }
+
+      const currentState = evolutionState?.instance?.state;
+      const updatedData: any = { status: currentState || 'disconnected' };
+      
+      if (currentState === 'open') {
+          updatedData.phone_number = evolutionState?.instance?.owner?.replace('@s.whatsapp.net', '');
+          updatedData.qr_code = null; 
+      }
+
+      const { data: upsertedInstance } = await supabase
+        .from('whatsapp_instances')
+        .update(updatedData)
+        .eq('business_id', businessId)
+        .select()
+        .single();
+        
+      return new Response(JSON.stringify(upsertedInstance), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // --- PUT: Connect (Get QR Code) ---
     if (req.method === 'PUT') {
+        if (!existingInstance) throw new Error("Instância não encontrada para conectar.");
+        const instanceName = existingInstance.instance_name;
+
         const connectData = await evolutionClient.connectInstance(instanceName, EVOLUTION_API_KEY, EVOLUTION_API_URL);
         
-        // Evolution returns { code, base64 } usually
         const qrCode = connectData?.base64 || connectData?.qrcode?.base64;
-        
         if (!qrCode) {
-             // If no QR code returned, maybe already connected?
              const state = await evolutionClient.getConnectionState(instanceName, EVOLUTION_API_KEY, EVOLUTION_API_URL);
-             if (state?.instance?.state === 'open') {
-                 throw new Error("Instância já está conectada.");
-             }
+             if (state?.instance?.state === 'open') throw new Error("Instância já está conectada.");
              throw new Error("Não foi possível obter o QR Code da API.");
         }
 
@@ -175,12 +182,13 @@ serve(async (req) => {
 
     // --- DELETE: Logout/Delete ---
     if (req.method === 'DELETE') {
-      try {
-        await evolutionClient.logoutInstance(instanceName, EVOLUTION_API_KEY, EVOLUTION_API_URL);
-        // Also try to delete to be clean
-        await evolutionClient.deleteInstance(instanceName, EVOLUTION_API_KEY, EVOLUTION_API_URL);
-      } catch (error) {
-        console.warn(`Clean up error: ${error.message}`);
+      if (existingInstance) {
+          try {
+            await evolutionClient.logoutInstance(existingInstance.instance_name, EVOLUTION_API_KEY, EVOLUTION_API_URL);
+            await evolutionClient.deleteInstance(existingInstance.instance_name, EVOLUTION_API_KEY, EVOLUTION_API_URL);
+          } catch (error) {
+            console.warn(`Clean up error: ${error.message}`);
+          }
       }
       
       await supabase.from('whatsapp_instances').delete().eq('business_id', businessId);
