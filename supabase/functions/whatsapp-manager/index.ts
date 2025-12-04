@@ -26,8 +26,14 @@ const evolutionClient = {
     }
     const response = await fetch(url, options);
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Evolution API Error: ${error.message || response.statusText}`);
+      const errorText = await response.text();
+      console.error("Evolution API Error Response:", errorText);
+      try {
+        const errorJson = JSON.parse(errorText);
+        throw new Error(`Evolution API Error: ${errorJson.message || response.statusText}`);
+      } catch {
+        throw new Error(`Evolution API Error: ${response.statusText}`);
+      }
     }
     return response.json();
   },
@@ -56,25 +62,21 @@ serve(async (req) => {
   }
 
   try {
+    // Criar um cliente Supabase que atua em nome do usuário autenticado
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
       { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Usuário não autenticado.");
+    // Usar a função RPC para obter o business_id de forma segura
+    const { data: businessId, error: rpcError } = await supabase.rpc('get_my_business_id');
 
-    const { data: profile, error: profileError } = await supabase
-      .from('users')
-      .select('business_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile?.business_id) {
-      throw new Error("Negócio não encontrado para este usuário.");
+    if (rpcError || !businessId) {
+      console.error("RPC Error:", rpcError);
+      throw new Error("Usuário não autenticado ou sem negócio vinculado.");
     }
-    const businessId = profile.business_id;
+    
     const instanceName = `business_${businessId.replace(/-/g, '')}`;
 
     // --- Lógica de Roteamento ---
@@ -94,14 +96,12 @@ serve(async (req) => {
         });
       }
       
-      // Consulta o status real na Evolution API
       const evolutionState = await evolutionClient.getConnectionState(instanceName);
       
-      // Atualiza nosso banco se houver divergência
       if (existingInstance.status !== evolutionState.instance.state) {
           const { data: updatedInstance } = await supabase
               .from('whatsapp_instances')
-              .update({ status: evolutionState.instance.state, qr_code: evolutionState.instance.qrcode })
+              .update({ status: evolutionState.instance.state, qr_code: evolutionState.instance.qrcode?.base64 })
               .eq('id', existingInstance.id)
               .select()
               .single();
@@ -119,7 +119,7 @@ serve(async (req) => {
         business_id: businessId,
         instance_name: instanceName,
         api_key: evolutionData.hash.apikey,
-        qr_code: evolutionData.instance.qrcode,
+        qr_code: evolutionData.instance.qrcode?.base64,
         status: 'connecting',
       };
 
@@ -152,6 +152,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
+    console.error("Edge Function Error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
