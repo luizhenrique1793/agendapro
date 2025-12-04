@@ -14,6 +14,7 @@ import Users from "./pages/admin/Users";
 import UserForm from "./pages/admin/UserForm";
 import Reports from "./pages/admin/Reports";
 import Settings from "./pages/admin/Settings";
+import SettingsWhatsapp from "./pages/admin/SettingsWhatsapp"; // Importando a nova página
 import Clients from "./pages/admin/Clients";
 import Professionals from "./pages/admin/Professionals";
 import BusinessPage from "./pages/BusinessPage";
@@ -136,6 +137,14 @@ const AppRoutes: React.FC = () => {
         element={
           <PrivateRoute>
             <Settings />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/manager/settings/whatsapp"
+        element={
+          <PrivateRoute>
+            <SettingsWhatsapp />
           </PrivateRoute>
         }
       />
