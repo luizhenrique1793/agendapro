@@ -35,6 +35,7 @@ interface AppContextType {
   logout: () => void;
   googleCalendarConnected: boolean;
   toggleGoogleCalendar: () => void;
+  sendDailyReminders: () => Promise<any>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -123,7 +124,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .from('businesses')
       .update(businessUpdate)
       .eq('id', currentBusiness.id)
-      .select('id', { count: 'exact' }); // Request count
+      .select('id', { count: 'exact' }); 
 
     if (error) throw error;
     
@@ -246,6 +247,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await fetchData();
   };
 
+  const sendDailyReminders = async () => {
+    const { data, error } = await supabase.functions.invoke('send-appointment-reminders', {});
+    if (error) throw error;
+    return data;
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -280,6 +287,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isAuthenticated,
         googleCalendarConnected,
         toggleGoogleCalendar: () => setGoogleCalendarConnected(!googleCalendarConnected),
+        sendDailyReminders,
       }}
     >
       {children}

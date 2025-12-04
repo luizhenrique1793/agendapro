@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
-import { Clock, Calendar as CalendarIcon, X, Save, ChevronLeft, ChevronRight, CheckCircle, DollarSign } from "lucide-react";
+import { Clock, Calendar as CalendarIcon, X, Save, ChevronLeft, ChevronRight, CheckCircle, DollarSign, Send, Loader2 } from "lucide-react";
 import { Appointment, AppointmentStatus } from "../../types";
 
 type ViewType = "day" | "week" | "month";
@@ -14,12 +14,15 @@ const toLocalDateString = (date: Date): string => {
 };
 
 const Schedule: React.FC = () => {
-  const { appointments, services, professionals, rescheduleAppointment, updateAppointmentStatus, completeAppointment } = useApp();
+  const { appointments, services, professionals, rescheduleAppointment, updateAppointmentStatus, completeAppointment, sendDailyReminders } = useApp();
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false);
   const [view, setView] = useState<ViewType>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
+  
+  // Reminder State
+  const [sendingReminders, setSendingReminders] = useState(false);
 
   // Form States
   const [newDate, setNewDate] = useState("");
@@ -63,6 +66,24 @@ const Schedule: React.FC = () => {
       rescheduleAppointment(selectedAppointment.id, newDate, newTime);
       setIsRescheduling(false);
       setSelectedAppointment(null);
+    }
+  };
+
+  const handleSendReminders = async () => {
+    if (!window.confirm("Isso enviará uma mensagem no WhatsApp para TODOS os clientes agendados para HOJE. Deseja continuar?")) {
+        return;
+    }
+    
+    setSendingReminders(true);
+    try {
+        const result = await sendDailyReminders();
+        const sentCount = result.processed?.filter((r: any) => r.status === 'sent').length || 0;
+        alert(`${sentCount} lembretes enviados com sucesso!`);
+    } catch (error: any) {
+        console.error(error);
+        alert("Erro ao enviar lembretes: " + error.message);
+    } finally {
+        setSendingReminders(false);
     }
   };
 
@@ -250,22 +271,46 @@ const Schedule: React.FC = () => {
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-bold text-gray-900">Agenda</h1>
-            <div className="flex items-center rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+            
+            {/* View Toggles */}
+            <div className="hidden sm:flex items-center rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
               <button onClick={() => setView('day')} className={`rounded px-3 py-1 text-sm font-medium ${view === 'day' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}>Dia</button>
               <button onClick={() => setView('week')} className={`rounded px-3 py-1 text-sm font-medium ${view === 'week' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}>Semana</button>
               <button onClick={() => setView('month')} className={`rounded px-3 py-1 text-sm font-medium ${view === 'month' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}>Mês</button>
             </div>
           </div>
-          <div className="flex items-center gap-2 rounded-lg bg-white p-1 shadow-sm border border-gray-200">
-            <button onClick={goToPrevious} className="rounded p-1 hover:bg-gray-100"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
-            <div className="min-w-[140px] text-center text-sm font-medium text-gray-900">
-              {view === 'day' && currentDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
-              {view === 'week' && `Semana de ${currentDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`}
-              {view === 'month' && currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+          
+          <div className="flex gap-2">
+            <button
+                onClick={handleSendReminders}
+                disabled={sendingReminders}
+                className="hidden sm:flex items-center rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 disabled:opacity-70"
+            >
+                {sendingReminders ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                Enviar Lembretes Hoje
+            </button>
+
+            <div className="flex items-center gap-2 rounded-lg bg-white p-1 shadow-sm border border-gray-200">
+                <button onClick={goToPrevious} className="rounded p-1 hover:bg-gray-100"><ChevronLeft className="h-5 w-5 text-gray-600" /></button>
+                <div className="min-w-[140px] text-center text-sm font-medium text-gray-900">
+                {view === 'day' && currentDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                {view === 'week' && `Semana de ${currentDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`}
+                {view === 'month' && currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                </div>
+                <button onClick={goToNext} className="rounded p-1 hover:bg-gray-100"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
             </div>
-            <button onClick={goToNext} className="rounded p-1 hover:bg-gray-100"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
           </div>
         </div>
+        
+        {/* Mobile Reminder Button */}
+        <button
+            onClick={handleSendReminders}
+            disabled={sendingReminders}
+            className="mb-4 flex w-full sm:hidden items-center justify-center rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 disabled:opacity-70"
+        >
+            {sendingReminders ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+            Enviar Lembretes Hoje
+        </button>
 
         {view === 'day' && <DayView />}
         {view === 'month' && <MonthView />}
