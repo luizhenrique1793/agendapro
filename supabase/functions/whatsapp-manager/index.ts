@@ -10,16 +10,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Cliente da Evolution API
 const evolutionClient = {
   async request(endpoint: string, method: 'GET' | 'POST' | 'DELETE', body: object | null = null) {
     const url = `${EVOLUTION_API_URL}${endpoint}`;
     const options: RequestInit = {
       method,
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': EVOLUTION_API_KEY,
-      },
+      headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY },
     };
     if (body) {
       options.body = JSON.stringify(body);
@@ -27,24 +23,12 @@ const evolutionClient = {
     const response = await fetch(url, options);
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Evolution API Error Response:", errorText);
-      try {
-        const errorJson = JSON.parse(errorText);
-        // Específico para "instance not found"
-        if (response.status === 404 && errorJson?.response?.message?.[0]?.includes("instance does not exist")) {
-            throw new Error("Instance does not exist");
-        }
-        throw new Error(`Evolution API Error: ${errorJson.message || response.statusText}`);
-      } catch (e) {
-        // Se o erro já foi o específico, repassa ele. Senão, usa o erro genérico.
-        if (e.message === "Instance does not exist") throw e;
-        throw new Error(`Evolution API Error: ${response.statusText}`);
-      }
+      console.error(`Evolution API Error (${response.status}):`, errorText);
+      throw new Error(`Evolution API request failed with status ${response.status}`);
     }
     const responseText = await response.text();
     return responseText ? JSON.parse(responseText) : {};
   },
-
   createInstance(name: string) {
     const webhookUrl = `${APP_URL}/api/webhooks/whatsapp`;
     return this.request('/instance/create', 'POST', {
@@ -53,11 +37,9 @@ const evolutionClient = {
       webhook: webhookUrl,
     });
   },
-
   getConnectionState(instanceName: string) {
     return this.request(`/instance/connectionState/${instanceName}`, 'GET');
   },
-
   logoutInstance(instanceName: string) {
     return this.request(`/instance/logout/${instanceName}`, 'DELETE');
   }
@@ -83,44 +65,39 @@ serve(async (req) => {
     const instanceName = `business_${businessId.replace(/-/g, '')}`;
 
     if (req.method === 'GET') {
-      const { data: existingInstance } = await supabase
-        .from('whatsapp_instances')
-        .select('*')
-        .eq('business_id', businessId)
-        .single();
-
-      if (!existingInstance) {
+      let evolutionState = null;
+      try {
+        evolutionState = await evolutionClient.getConnectionState(instanceName);
+      } catch (error) {
+        console.log(`Could not get instance state from Evolution for ${instanceName}. Error: ${error.message}. Cleaning up stale instance.`);
+        await supabase.from('whatsapp_instances').delete().eq('business_id', businessId);
         return new Response(JSON.stringify({ status: 'not_found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-      
-      try {
-        const evolutionState = await evolutionClient.getConnectionState(instanceName);
-        const currentState = evolutionState?.instance?.state;
-        const qrCode = evolutionState?.instance?.qrcode?.base64;
 
-        if (currentState && existingInstance.status !== currentState) {
-            const { data: updatedInstance } = await supabase
-                .from('whatsapp_instances')
-                .update({ status: currentState, qr_code: qrCode })
-                .eq('id', existingInstance.id)
-                .select()
-                .single();
-            return new Response(JSON.stringify(updatedInstance), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
+      const currentState = evolutionState?.instance?.state;
+      const qrCode = evolutionState?.instance?.qrcode?.base64;
+      const phoneNumber = evolutionState?.instance?.owner?.replace('@s.whatsapp.net', '');
 
-        return new Response(JSON.stringify(existingInstance), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      } catch (error) {
-        if (error.message === "Instance does not exist") {
-          await supabase.from('whatsapp_instances').delete().eq('id', existingInstance.id);
-          return new Response(JSON.stringify({ status: 'not_found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        throw error;
-      }
+      const updatedInstanceData = {
+        business_id: businessId,
+        instance_name: instanceName,
+        status: currentState || 'disconnected',
+        qr_code: qrCode,
+        phone_number: phoneNumber,
+      };
+
+      const { data: upsertedInstance, error: upsertError } = await supabase
+        .from('whatsapp_instances')
+        .upsert(updatedInstanceData, { onConflict: 'business_id' })
+        .select()
+        .single();
+
+      if (upsertError) throw upsertError;
+      return new Response(JSON.stringify(upsertedInstance), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (req.method === 'POST') {
       const evolutionData = await evolutionClient.createInstance(instanceName);
-      
       const newInstance = {
         business_id: businessId,
         instance_name: instanceName,
@@ -128,33 +105,25 @@ serve(async (req) => {
         qr_code: evolutionData?.instance?.qrcode?.base64,
         status: 'connecting',
       };
-
-      const { data, error } = await supabase
-        .from('whatsapp_instances')
-        .upsert(newInstance, { onConflict: 'business_id' })
-        .select()
-        .single();
-
+      const { data, error } = await supabase.from('whatsapp_instances').upsert(newInstance, { onConflict: 'business_id' }).select().single();
       if (error) throw error;
       return new Response(JSON.stringify(data), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (req.method === 'DELETE') {
-      await evolutionClient.logoutInstance(instanceName);
-      
-      const { error } = await supabase
-        .from('whatsapp_instances')
-        .delete()
-        .eq('business_id', businessId);
-
-      if (error) throw error;
+      try {
+        await evolutionClient.logoutInstance(instanceName);
+      } catch (error) {
+        console.warn(`Could not logout instance ${instanceName} from Evolution. It might already be gone. Message: ${error.message}`);
+      }
+      await supabase.from('whatsapp_instances').delete().eq('business_id', businessId);
       return new Response(JSON.stringify({ message: 'Instância desconectada com sucesso.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     return new Response(JSON.stringify({ error: 'Método não permitido' }), { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
-    console.error("Edge Function Error:", error);
+    console.error("Edge Function Final Error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
