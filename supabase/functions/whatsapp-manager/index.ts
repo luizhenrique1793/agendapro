@@ -30,18 +30,23 @@ const evolutionClient = {
       console.error("Evolution API Error Response:", errorText);
       try {
         const errorJson = JSON.parse(errorText);
+        // Específico para "instance not found"
+        if (response.status === 404 && errorJson?.response?.message?.[0]?.includes("instance does not exist")) {
+            throw new Error("Instance does not exist");
+        }
         throw new Error(`Evolution API Error: ${errorJson.message || response.statusText}`);
-      } catch {
+      } catch (e) {
+        // Se o erro já foi o específico, repassa ele. Senão, usa o erro genérico.
+        if (e.message === "Instance does not exist") throw e;
         throw new Error(`Evolution API Error: ${response.statusText}`);
       }
     }
-    // Handle cases where response might be empty
     const responseText = await response.text();
     return responseText ? JSON.parse(responseText) : {};
   },
 
   createInstance(name: string) {
-    const webhookUrl = `${APP_URL}/api/webhooks/whatsapp`; // Futuro webhook
+    const webhookUrl = `${APP_URL}/api/webhooks/whatsapp`;
     return this.request('/instance/create', 'POST', {
       instanceName: name,
       qrcode: true,
@@ -88,21 +93,29 @@ serve(async (req) => {
         return new Response(JSON.stringify({ status: 'not_found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       
-      const evolutionState = await evolutionClient.getConnectionState(instanceName);
-      const currentState = evolutionState?.instance?.state;
-      const qrCode = evolutionState?.instance?.qrcode?.base64;
+      try {
+        const evolutionState = await evolutionClient.getConnectionState(instanceName);
+        const currentState = evolutionState?.instance?.state;
+        const qrCode = evolutionState?.instance?.qrcode?.base64;
 
-      if (currentState && existingInstance.status !== currentState) {
-          const { data: updatedInstance } = await supabase
-              .from('whatsapp_instances')
-              .update({ status: currentState, qr_code: qrCode })
-              .eq('id', existingInstance.id)
-              .select()
-              .single();
-          return new Response(JSON.stringify(updatedInstance), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        if (currentState && existingInstance.status !== currentState) {
+            const { data: updatedInstance } = await supabase
+                .from('whatsapp_instances')
+                .update({ status: currentState, qr_code: qrCode })
+                .eq('id', existingInstance.id)
+                .select()
+                .single();
+            return new Response(JSON.stringify(updatedInstance), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        return new Response(JSON.stringify(existingInstance), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      } catch (error) {
+        if (error.message === "Instance does not exist") {
+          await supabase.from('whatsapp_instances').delete().eq('id', existingInstance.id);
+          return new Response(JSON.stringify({ status: 'not_found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        throw error;
       }
-
-      return new Response(JSON.stringify(existingInstance), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (req.method === 'POST') {
