@@ -30,14 +30,16 @@ serve(async (req) => {
     // Limpa o número (remove caracteres não numéricos)
     const cleanPhone = to.replace(/\D/g, "");
 
+    // Ajuste no payload conforme erro "instance requires property 'text'"
+    // Algumas versões da API esperam "text" na raiz, outras dentro de "textMessage".
+    // Vamos usar o formato simplificado que o erro sugere.
     const payload = {
       number: cleanPhone,
-      textMessage: {
-        text: message
-      },
+      text: message,
       options: {
         delay: 1000,
-        presence: "composing"
+        presence: "composing",
+        linkPreview: false
       }
     };
 
