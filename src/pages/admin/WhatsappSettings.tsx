@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
 import { supabase } from "../../lib/supabase";
-import { Save, Loader2, MessageCircle, CheckCircle2, AlertCircle, Wifi, WifiOff, Send, Phone, RefreshCw, AlertTriangle, Bug } from "lucide-react";
+import { Save, Loader2, MessageCircle, CheckCircle2, AlertCircle, Wifi, WifiOff, Send, Phone, RefreshCw, AlertTriangle, Bug, BellRing } from "lucide-react";
 import { EvolutionApiConfig } from "../../types";
 
 const WhatsappSettings: React.FC = () => {
@@ -13,6 +13,8 @@ const WhatsappSettings: React.FC = () => {
     apiKey: "",
     instanceName: ""
   });
+  
+  const [autoReminders, setAutoReminders] = useState(false);
   
   const [status, setStatus] = useState<"idle" | "testing" | "connected" | "disconnected" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
@@ -25,16 +27,16 @@ const WhatsappSettings: React.FC = () => {
   const [testResult, setTestResult] = useState<{success: boolean; message: string} | null>(null);
 
   useEffect(() => {
-    if (currentBusiness?.evolution_api_config) {
-      setConfig({
-          serverUrl: currentBusiness.evolution_api_config.serverUrl || "",
-          apiKey: currentBusiness.evolution_api_config.apiKey || "",
-          instanceName: currentBusiness.evolution_api_config.instanceName || ""
-      });
-      
-      if (currentBusiness.evolution_api_config.instanceName) {
-         // Config exists
+    if (currentBusiness) {
+      if (currentBusiness.evolution_api_config) {
+        setConfig({
+            serverUrl: currentBusiness.evolution_api_config.serverUrl || "",
+            apiKey: currentBusiness.evolution_api_config.apiKey || "",
+            instanceName: currentBusiness.evolution_api_config.instanceName || ""
+        });
       }
+      // @ts-ignore - Property added via SQL, might not be in types yet
+      setAutoReminders(currentBusiness.automatic_reminders || false);
     }
   }, [currentBusiness]);
 
@@ -46,15 +48,22 @@ const WhatsappSettings: React.FC = () => {
     // Debug log
     console.log("---------------- DEBUG START ----------------");
     console.log("Tentando salvar configuração para o negócio ID:", currentBusiness?.id);
-    console.log("Dados atuais do negócio:", currentBusiness);
-    console.log("Payload a ser enviado:", config);
+    
+    const payload = { 
+        evolution_api_config: config,
+        // @ts-ignore
+        automatic_reminders: autoReminders
+    };
+    
+    console.log("Payload a ser enviado:", payload);
 
     try {
         if (!currentBusiness?.id) {
             throw new Error("ID do negócio não encontrado. Verifique se você está logado e vinculado a um negócio.");
         }
 
-        await updateBusiness({ evolution_api_config: config });
+        // @ts-ignore
+        await updateBusiness(payload);
         alert("Configurações salvas com sucesso!");
     } catch (error: any) {
         console.error("ERRO CRÍTICO AO SALVAR:", error);
@@ -240,6 +249,28 @@ const WhatsappSettings: React.FC = () => {
                             className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500" 
                         />
                         </div>
+                    </div>
+                </div>
+                
+                {/* Auto Reminders Toggle */}
+                <div className="mt-6 border-t border-gray-100 pt-6">
+                    <div className="flex items-start gap-4 rounded-lg border border-indigo-100 bg-indigo-50 p-4">
+                        <BellRing className="mt-1 h-6 w-6 text-indigo-600" />
+                        <div className="flex-1">
+                            <h3 className="text-base font-semibold text-indigo-900">Lembretes Automáticos</h3>
+                            <p className="mt-1 text-sm text-indigo-700">
+                                Enviar mensagens automaticamente para os clientes 2 horas antes do agendamento.
+                            </p>
+                        </div>
+                        <label className="relative inline-flex cursor-pointer items-center">
+                            <input 
+                                type="checkbox" 
+                                className="peer sr-only" 
+                                checked={autoReminders}
+                                onChange={(e) => setAutoReminders(e.target.checked)}
+                            />
+                            <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300"></div>
+                        </label>
                     </div>
                 </div>
 
