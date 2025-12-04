@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Loader2, CheckCircle2, AlertTriangle, Power, QrCode, Copy, Eye, EyeOff, Save, Link as LinkIcon } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertTriangle, Power, QrCode, Copy, Eye, EyeOff, Link as LinkIcon } from 'lucide-react';
 
 type InstanceStatus = 'loading' | 'no_instance' | 'created' | 'connecting' | 'connected' | 'error';
 
@@ -31,16 +31,18 @@ export const WhatsAppConnectionManager: React.FC = () => {
       });
 
       if (error) {
-        // Only reset if specifically not found (404-like behavior from logic)
-        if (data && data.status === 'no_instance') {
-            setStatus('no_instance');
-            setInstance(null);
-        }
+        // Se a função retornar erro, não mudamos o estado drasticamente a menos que seja 404
+        return;
+      }
+
+      if (data && data.status === 'no_instance') {
+        setStatus('no_instance');
+        setInstance(null);
         return;
       }
 
       setInstance(data);
-      if (data.status === 'open') {
+      if (data.status === 'open' || data.status === 'connected') {
         setStatus('connected');
       } else if (data.status === 'connecting' && data.qr_code) {
         setStatus('connecting');
@@ -58,17 +60,21 @@ export const WhatsAppConnectionManager: React.FC = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // Usando maybeSingle para evitar erro 406 quando não existe registro
       const { data, error } = await supabase
         .from('whatsapp_instances')
         .select('*')
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (error || !data) {
+      if (error) {
+        console.error("Erro ao buscar instância:", error);
+        setStatus('no_instance');
+      } else if (!data) {
         setStatus('no_instance');
       } else {
         setInstance(data);
-        if (data.status === 'open') {
+        if (data.status === 'open' || data.status === 'connected') {
           setStatus('connected');
         } else if (data.qr_code) {
           setStatus('connecting');
@@ -90,8 +96,8 @@ export const WhatsAppConnectionManager: React.FC = () => {
 
   const handleManualConnect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newInstanceName.trim() || !newApiKey.trim()) {
-      setError("Preencha o nome da instância e a API Key.");
+    if (!newInstanceName.trim()) {
+      setError("Preencha o nome da instância.");
       return;
     }
 
@@ -107,10 +113,10 @@ export const WhatsAppConnectionManager: React.FC = () => {
       });
       
       if (error) throw new Error(error.message || "Erro ao conectar.");
-      if (data.error) throw new Error(data.error);
+      if (data && data.error) throw new Error(data.error);
       
       setInstance(data);
-      setStatus(data.status === 'open' ? 'connected' : 'created');
+      setStatus('created');
       setNewInstanceName(""); 
       setNewApiKey("");
     } catch (err: any) {
@@ -131,10 +137,14 @@ export const WhatsAppConnectionManager: React.FC = () => {
       });
       
       if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      if (data && data.error) throw new Error(data.error);
 
-      setInstance(prev => ({ ...prev!, qr_code: data.qr_code, status: 'connecting' }));
-      setStatus('connecting');
+      if (data.qr_code) {
+        setInstance(prev => ({ ...prev!, qr_code: data.qr_code, status: 'connecting' }));
+        setStatus('connecting');
+      } else {
+        alert("Solicitação de QR Code enviada. Aguarde alguns segundos...");
+      }
     } catch (err: any) {
       setError(err.message || 'Erro ao gerar QR Code.');
     } finally {
@@ -197,7 +207,7 @@ export const WhatsAppConnectionManager: React.FC = () => {
             </div>
             
             <div>
-                <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700 text-left">Instance API Key</label>
+                <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700 text-left">Instance API Key (Opcional)</label>
                 <input 
                     type="text" 
                     id="apiKey"
@@ -205,7 +215,6 @@ export const WhatsAppConnectionManager: React.FC = () => {
                     onChange={(e) => setNewApiKey(e.target.value)}
                     placeholder="Cole a chave da instância aqui"
                     className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm font-mono"
-                    required
                 />
             </div>
 
@@ -254,7 +263,7 @@ export const WhatsAppConnectionManager: React.FC = () => {
           <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">API Key Configurada</label>
           <div className="mt-1 flex items-center gap-2">
             <code className="flex-1 font-mono text-sm text-green-400 truncate">
-              {showApiKey ? instance?.api_key : '•'.repeat(40)}
+              {showApiKey ? (instance?.api_key || "Não configurada") : '•'.repeat(40)}
             </code>
             <button onClick={() => setShowApiKey(!showApiKey)} className="p-1.5 text-gray-400 hover:text-white rounded transition-colors">
               {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
