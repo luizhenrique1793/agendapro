@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
 import { supabase } from "../../lib/supabase";
-import { Save, Loader2, MessageCircle, CheckCircle2, AlertCircle, Wifi, WifiOff, Send, Phone } from "lucide-react";
+import { Save, Loader2, MessageCircle, CheckCircle2, AlertCircle, Wifi, WifiOff, Send, Phone, RefreshCw } from "lucide-react";
 import { EvolutionApiConfig } from "../../types";
 
 const WhatsappSettings: React.FC = () => {
@@ -16,6 +16,7 @@ const WhatsappSettings: React.FC = () => {
   
   const [status, setStatus] = useState<"idle" | "testing" | "connected" | "disconnected" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Test Message State
   const [testPhone, setTestPhone] = useState("");
@@ -24,17 +25,34 @@ const WhatsappSettings: React.FC = () => {
 
   useEffect(() => {
     if (currentBusiness?.evolution_api_config) {
-      setConfig(currentBusiness.evolution_api_config);
-      // Se já temos config, assumimos conectado até que se prove o contrário ou usuário teste novamente
+      setConfig({
+          serverUrl: currentBusiness.evolution_api_config.serverUrl || "",
+          apiKey: currentBusiness.evolution_api_config.apiKey || "",
+          instanceName: currentBusiness.evolution_api_config.instanceName || ""
+      });
+      
+      // Se tiver configuração salva, assumimos um estado inicial neutro, mas indicando que existe config
       if (currentBusiness.evolution_api_config.instanceName) {
-         setStatus("connected");
-         setStatusMessage("Configuração salva.");
+         // Não forçamos o status para connected para não enganar, mas o usuário pode testar
       }
     }
   }, [currentBusiness]);
 
-  const handleTestAndSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSaving(true);
+    try {
+        await updateBusiness({ evolution_api_config: config });
+        alert("Configurações salvas com sucesso!");
+    } catch (error: any) {
+        console.error("Erro ao salvar:", error);
+        alert(`Erro ao salvar configurações: ${error.message}`);
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
     setStatus("testing");
     setStatusMessage("Testando conexão com a instância...");
     setTestResult(null);
@@ -57,16 +75,12 @@ const WhatsappSettings: React.FC = () => {
       if (connectionState === "open") {
         setStatus("connected");
         setStatusMessage("Instância conectada com sucesso!");
-        await updateBusiness({ evolution_api_config: config });
-        
       } else if (connectionState === "close") {
         setStatus("disconnected");
         setStatusMessage("Instância encontrada, mas está desconectada (precisa ler QR Code).");
-        await updateBusiness({ evolution_api_config: config });
       } else if (connectionState === "connecting") {
          setStatus("disconnected");
          setStatusMessage("A instância está tentando conectar...");
-         await updateBusiness({ evolution_api_config: config });
       } else {
         setStatus("error");
         setStatusMessage(`Status desconhecido: ${JSON.stringify(connectionState)}.`);
@@ -128,7 +142,7 @@ const WhatsappSettings: React.FC = () => {
             <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                 <h2 className="mb-4 text-lg font-bold text-gray-900">Configuração da Instância</h2>
                 
-                <form onSubmit={handleTestAndSave} className="space-y-6">
+                <form className="space-y-6" onSubmit={(e) => handleSave(e)}>
                 <div className="grid gap-6 md:grid-cols-2">
                     <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700">Server URL</label>
@@ -197,30 +211,31 @@ const WhatsappSettings: React.FC = () => {
                     </div>
                 )}
 
-                <div className="flex justify-end pt-4 border-t border-gray-100">
+                <div className="flex justify-between items-center pt-4 border-t border-gray-100">
                     <button 
-                    type="submit" 
-                    disabled={status === "testing"}
-                    className="flex items-center rounded-lg bg-green-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-500 disabled:opacity-70"
+                        type="button" 
+                        onClick={handleTestConnection}
+                        disabled={status === "testing" || !config.serverUrl}
+                        className="flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-70"
                     >
-                    {status === "testing" ? (
-                        <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Verificando...
-                        </>
-                    ) : (
-                        <>
-                        <Save className="mr-2 h-4 w-4" />
-                        Salvar Configuração
-                        </>
-                    )}
+                        {status === "testing" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                        Testar Conexão
+                    </button>
+
+                    <button 
+                        type="submit" 
+                        disabled={isSaving}
+                        className="flex items-center rounded-lg bg-green-600 px-6 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 disabled:opacity-70"
+                    >
+                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                        {isSaving ? "Salvando..." : "Salvar Configuração"}
                     </button>
                 </div>
                 </form>
             </div>
 
             {/* Test Message Card */}
-            {status === "connected" && (
+            {(status === "connected" || currentBusiness?.evolution_api_config?.instanceName) && (
                 <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm animate-in slide-in-from-bottom-4 duration-500">
                     <div className="flex items-center gap-2 mb-4">
                         <Send className="h-5 w-5 text-blue-600" />
