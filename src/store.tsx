@@ -118,11 +118,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateBusiness = async (businessUpdate: Partial<Business>) => {
     if (!currentBusiness?.id) throw new Error("Negócio não identificado.");
-    const { error } = await supabase
+    
+    const { error, count } = await supabase
       .from('businesses')
       .update(businessUpdate)
-      .eq('id', currentBusiness.id);
+      .eq('id', currentBusiness.id)
+      .select('id', { count: 'exact' }); // Request count
+
     if (error) throw error;
+    
+    if (count === 0) {
+        throw new Error("Nenhum registro foi atualizado. Verifique suas permissões (RLS) ou se o negócio ainda existe.");
+    }
+
     await fetchData();
   };
 
