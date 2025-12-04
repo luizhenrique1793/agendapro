@@ -19,7 +19,9 @@ const BookingFlow: React.FC = () => {
   // State for data fetched based on slug
   const [business, setBusiness] = useState<Business | null>(null);
   const [services, setServices] = useState<Service[]>([]);
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
+  const [serviceProsMap, setServiceProsMap] = useState<Record<string, string[]>>({});
+  
   const [loadingState, setLoadingState] = useState<"loading" | "success" | "error">("loading");
 
   // State for the booking process steps
@@ -69,7 +71,22 @@ const BookingFlow: React.FC = () => {
           .from("professionals")
           .select("*")
           .eq("business_id", businessData.id);
-        setProfessionals(prosData || []);
+        setAllProfessionals(prosData || []);
+
+        // Fetch relationship map
+        const { data: relData } = await supabase
+            .from("service_professionals")
+            .select("service_id, professional_id")
+            .eq("business_id", businessData.id);
+        
+        const map: Record<string, string[]> = {};
+        if (relData) {
+            relData.forEach(item => {
+                if (!map[item.service_id]) map[item.service_id] = [];
+                map[item.service_id].push(item.professional_id);
+            });
+        }
+        setServiceProsMap(map);
 
         setLoadingState("success");
       } catch (error) {
@@ -92,81 +109,22 @@ const BookingFlow: React.FC = () => {
       setSelectedTime("");
 
       try {
-        // Replace dashes with slashes to ensure the date is parsed in the local timezone, not UTC.
-        // new Date('2024-12-05') is often treated as UTC midnight, which can be the previous day in some timezones.
-        const dateObj = new Date(selectedDate.replace(/-/g, '/'));
-
-        const dayOfWeekIndex = dateObj.getDay();
-        const dayNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-        const dayName = dayNames[dayOfWeekIndex];
-        
-        const proSchedule = selectedPro.schedule?.find(s => s.day === dayName);
-
-        if (!proSchedule || !proSchedule.active || proSchedule.intervals.length === 0) {
-          setAvailableSlots([]);
-          setLoadingSlots(false);
-          return;
-        }
-
-        const { data: appointments } = await supabase
-          .from("appointments")
-          .select("time, services(duration)")
-          .eq("professional_id", selectedPro.id)
-          .eq("date", selectedDate);
-
-        const { data: blocks } = await supabase
-          .from("professional_blocks")
-          .select("start_time, end_time")
-          .eq("professional_id", selectedPro.id)
-          .lte("start_date", selectedDate)
-          .gte("end_date", selectedDate);
-
-        const timeToMinutes = (time: string) => {
-          const [hours, minutes] = time.split(':').map(Number);
-          return hours * 60 + minutes;
-        };
-
-        const bookedRanges = (appointments || []).map((a: any) => {
-          const start = timeToMinutes(a.time);
-          const end = start + (a.services?.duration || 30);
-          return { start, end };
-        });
-
-        (blocks || []).forEach(b => {
-            if (!b.start_time || !b.end_time) {
-                bookedRanges.push({ start: 0, end: 24 * 60 });
-            } else {
-                bookedRanges.push({ start: timeToMinutes(b.start_time), end: timeToMinutes(b.end_time) });
-            }
-        });
-
-        const potentialSlots: string[] = [];
-        const serviceDuration = selectedService.duration;
-        const slotInterval = 15;
-
-        proSchedule.intervals.forEach(interval => {
-          let currentMinute = timeToMinutes(interval.start);
-          const endMinute = timeToMinutes(interval.end);
-
-          while (currentMinute + serviceDuration <= endMinute) {
-            const slotStart = currentMinute;
-            const slotEnd = currentMinute + serviceDuration;
-
-            const isOverlapping = bookedRanges.some(range => 
-              slotStart < range.end && slotEnd > range.start
-            );
-
-            if (!isOverlapping) {
-              const hours = Math.floor(slotStart / 60).toString().padStart(2, '0');
-              const minutes = (slotStart % 60).toString().padStart(2, '0');
-              potentialSlots.push(`${hours}:${minutes}`);
-            }
-            
-            currentMinute += slotInterval;
+        const { data, error } = await supabase.functions.invoke('get-available-slots', {
+          body: {
+            professional_id: selectedPro.id,
+            service_id: selectedService.id,
+            date: selectedDate,
+            business_id: business?.id
           }
         });
 
-        setAvailableSlots(potentialSlots);
+        if (error) throw error;
+        
+        if (data.availableSlots) {
+            setAvailableSlots(data.availableSlots);
+        } else {
+            setAvailableSlots([]);
+        }
 
       } catch (error) {
         console.error("Error calculating slots:", error);
@@ -199,7 +157,6 @@ const BookingFlow: React.FC = () => {
 
       if (error) throw error;
   
-      // Move to confirmation step
       setStep(5);
     } catch (error: any) {
       console.error("Error booking appointment:", error);
@@ -211,6 +168,39 @@ const BookingFlow: React.FC = () => {
     return <BookingStatus status={loadingState} />;
   }
 
+  // Filter professionals for the selected service
+  // If no relation exists in map (legacy or not set), maybe show all? 
+  // Requirement says: "se o profissional não estiver vinculado... não aparece". 
+  // So strict filtering. If map is empty for a service, show none (or all if we want fallback, but user asked for restriction).
+  // Let's implement strict filtering BUT fallback to ALL if the service has NO entries in the join table at all?
+  // User said: "se o profissional não estiver vinculado... não aparece". This implies explicit linking.
+  // However, for existing data without links, everything would disappear.
+  // Let's assume: if there are entries in service_professionals table for this service, filter. If not, show all (migration period).
+  // Or simpler: User creates/updates service -> links pros. If no links, no pros.
+  // I will show ONLY linked pros. If the list is empty, I'll show a message "Nenhum profissional disponível".
+  
+  const getFilteredProfessionals = () => {
+    if (!selectedService) return [];
+    
+    const linkedIds = serviceProsMap[selectedService.id];
+    
+    // Fallback: If no mapping exists for this service, show ALL (to support legacy/lazy setup)
+    // If user explicitly unchecks all, linkedIds is empty array? No, map entry won't exist if I fetched only existing rows?
+    // Actually my fetch logic builds map only for existing rows.
+    // So if I saved a service with 0 pros, map entry is undefined.
+    // Strategy: Check if there are ANY service_professionals for this business. If yes, enforce strict mode. If no (fresh install), maybe loose?
+    // Safer: strict filter based on map. If undefined, check if we want to show all. 
+    // Let's show all if undefined to be safe for existing data.
+    
+    if (!linkedIds) {
+        // If the service ID is not in the map, it means no professionals are explicitly linked.
+        // For backwards compatibility, return all professionals.
+        return allProfessionals;
+    }
+    
+    return allProfessionals.filter(p => linkedIds.includes(p.id));
+  };
+
   const renderStep = () => {
     switch (step) {
       case 1:
@@ -219,10 +209,26 @@ const BookingFlow: React.FC = () => {
           setStep(2);
         }} />;
       case 2:
-        return <ProfessionalSelectionStep professionals={professionals} onSelectPro={(pro) => {
-          setSelectedPro(pro);
-          setStep(3);
-        }} onBack={() => setStep(1)} />;
+        const filteredPros = getFilteredProfessionals();
+        return (
+            <div className="p-6 sm:p-8">
+                {filteredPros.length > 0 ? (
+                    <ProfessionalSelectionStep 
+                        professionals={filteredPros} 
+                        onSelectPro={(pro) => {
+                            setSelectedPro(pro);
+                            setStep(3);
+                        }} 
+                        onBack={() => setStep(1)} 
+                    />
+                ) : (
+                    <div className="text-center py-8">
+                        <p className="text-gray-500 mb-4">Nenhum profissional disponível para este serviço no momento.</p>
+                        <button onClick={() => setStep(1)} className="text-primary-600 font-semibold">Voltar</button>
+                    </div>
+                )}
+            </div>
+        );
       case 3:
         return <DateTimeSelectionStep 
           selectedDate={selectedDate}

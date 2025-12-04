@@ -1,12 +1,11 @@
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
-import { Plus, Trash2, Edit2 } from "lucide-react";
+import { Plus, Trash2, Edit2, CheckSquare, Square } from "lucide-react";
 import { Service } from "../../types";
 
 const Services: React.FC = () => {
-  const { services, addService, updateService, deleteService, loading } = useApp();
+  const { services, professionals, addService, updateService, deleteService, fetchServiceProfessionals, loading } = useApp();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -18,16 +17,34 @@ const Services: React.FC = () => {
     price: 0,
   });
 
+  const [selectedPros, setSelectedPros] = useState<string[]>([]);
+
   const handleAddNew = () => {
     setFormData({ name: "", duration: 30, price: 0 });
+    // By default select all pros or none? Let's select all for convenience or none.
+    // Usually businesses want all pros to do all services unless specified.
+    // Let's default to empty (none selected) or ALL? 
+    // Let's select ALL by default for new services to avoid confusion.
+    setSelectedPros(professionals.map(p => p.id));
     setIsEditing(false);
     setIsModalOpen(true);
   };
 
-  const handleEdit = (service: Service) => {
+  const handleEdit = async (service: Service) => {
     setFormData(service);
     setIsEditing(true);
     setIsModalOpen(true);
+    // Fetch linked pros
+    const linkedIds = await fetchServiceProfessionals(service.id);
+    setSelectedPros(linkedIds);
+  };
+
+  const togglePro = (proId: string) => {
+    setSelectedPros(prev => 
+        prev.includes(proId) 
+            ? prev.filter(id => id !== proId) 
+            : [...prev, proId]
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,26 +54,19 @@ const Services: React.FC = () => {
         setActionLoading(true);
         if (isEditing && formData.id) {
           // Update existing
-          await updateService(formData as Service);
+          await updateService(formData as Service, selectedPros);
         } else {
           // Add new
           await addService({
             name: formData.name!,
             duration: formData.duration || 30,
             price: Number(formData.price),
-          });
+          }, selectedPros);
         }
         setIsModalOpen(false);
       } catch (error: any) {
         console.error("Error saving service:", error);
-        console.error("Error details:", {
-          message: error?.message,
-          details: error?.details,
-          hint: error?.hint,
-          code: error?.code
-        });
-        const errorMsg = error?.message || "Erro desconhecido";
-        alert(`Erro ao salvar serviço: ${errorMsg}`);
+        alert(`Erro ao salvar serviço: ${error?.message || "Erro desconhecido"}`);
       } finally {
         setActionLoading(false);
       }
@@ -153,7 +163,7 @@ const Services: React.FC = () => {
         {/* Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
               <h2 className="mb-4 text-xl font-bold text-gray-900">
                 {isEditing ? "Editar Serviço" : "Adicionar Serviço"}
               </h2>
@@ -205,6 +215,35 @@ const Services: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {/* Professionals Selector */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Profissionais que realizam
+                    </label>
+                    <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-2">
+                        {professionals.length === 0 ? (
+                            <p className="text-xs text-gray-500">Nenhum profissional cadastrado.</p>
+                        ) : (
+                            professionals.map(pro => (
+                                <div 
+                                    key={pro.id} 
+                                    className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                                    onClick={() => togglePro(pro.id)}
+                                >
+                                    {selectedPros.includes(pro.id) ? (
+                                        <CheckSquare className="h-4 w-4 text-primary-600" />
+                                    ) : (
+                                        <Square className="h-4 w-4 text-gray-400" />
+                                    )}
+                                    <span className="text-sm text-gray-700">{pro.name}</span>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Se nenhum for selecionado, o serviço não aparecerá na agenda.</p>
+                </div>
+
                 <div className="mt-6 flex justify-end gap-3">
                   <button
                     type="button"

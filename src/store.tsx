@@ -17,8 +17,8 @@ interface AppContextType {
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
   completeAppointment: (id: string, paymentMethod: string, amountPaid: number) => Promise<void>;
   rescheduleAppointment: (id: string, newDate: string, newTime: string) => Promise<void>;
-  addService: (service: Omit<Service, "id">) => Promise<void>;
-  updateService: (service: Service) => Promise<void>;
+  addService: (service: Omit<Service, "id">, linkedProfessionalIds?: string[]) => Promise<void>;
+  updateService: (service: Service, linkedProfessionalIds?: string[]) => Promise<void>;
   deleteService: (id: string) => Promise<void>;
   addProfessional: (professional: Omit<Professional, "id">) => Promise<void>;
   updateProfessional: (professional: Professional) => Promise<void>;
@@ -31,6 +31,7 @@ interface AppContextType {
   addProfessionalBlock: (block: Omit<ProfessionalBlock, "id">) => Promise<void>;
   removeProfessionalBlock: (id: string) => Promise<void>;
   fetchProfessionalBlocks: (professionalId: string) => Promise<ProfessionalBlock[]>;
+  fetchServiceProfessionals: (serviceId: string) => Promise<string[]>;
   isAuthenticated: boolean;
   logout: () => void;
   googleCalendarConnected: boolean;
@@ -58,7 +59,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (user) {
       fetchData();
     } else {
-      // Clear state on logout
       setServices([]);
       setProfessionals([]);
       setAppointments([]);
@@ -88,7 +88,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (businessId) {
-        // Fetch data scoped to the business
         const { data: servicesData } = await supabase.from('services').select('*').eq('business_id', businessId);
         setServices(servicesData || []);
         const { data: prosData } = await supabase.from('professionals').select('*').eq('business_id', businessId);
@@ -98,7 +97,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const { data: clientsData } = await supabase.from('clients').select('*').eq('business_id', businessId);
         setClients(clientsData || []);
       } else if (role !== 'admin') {
-        // If user is not an admin and has no business, clear the data to prevent showing stale info.
         setServices([]);
         setProfessionals([]);
         setAppointments([]);
@@ -135,17 +133,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await fetchData();
   };
 
-  const addService = async (service: Omit<Service, "id">) => {
+  const updateServiceProfessionals = async (serviceId: string, professionalIds: string[]) => {
+    if (!currentBusiness?.id) return;
+
+    // 1. Delete existing
+    const { error: deleteError } = await supabase
+        .from('service_professionals')
+        .delete()
+        .eq('service_id', serviceId);
+    
+    if (deleteError) throw deleteError;
+
+    // 2. Insert new
+    if (professionalIds.length > 0) {
+        const toInsert = professionalIds.map(pid => ({
+            service_id: serviceId,
+            professional_id: pid,
+            business_id: currentBusiness.id
+        }));
+        const { error: insertError } = await supabase
+            .from('service_professionals')
+            .insert(toInsert);
+        
+        if (insertError) throw insertError;
+    }
+  };
+
+  const addService = async (service: Omit<Service, "id">, linkedProfessionalIds?: string[]) => {
     if (!currentBusiness?.id) throw new Error("Negócio não identificado.");
-    const { error } = await supabase.from('services').insert([{ ...service, business_id: currentBusiness.id }]);
+    
+    const { data, error } = await supabase
+        .from('services')
+        .insert([{ ...service, business_id: currentBusiness.id }])
+        .select()
+        .single();
+    
     if (error) throw error;
+
+    if (linkedProfessionalIds) {
+        await updateServiceProfessionals(data.id, linkedProfessionalIds);
+    }
+    
     fetchData();
   };
 
-  const updateService = async (updatedService: Service) => {
+  const updateService = async (updatedService: Service, linkedProfessionalIds?: string[]) => {
     const { error } = await supabase.from('services').update(updatedService).eq('id', updatedService.id);
     if (error) throw error;
+
+    if (linkedProfessionalIds) {
+        await updateServiceProfessionals(updatedService.id, linkedProfessionalIds);
+    }
+
     fetchData();
+  };
+
+  const fetchServiceProfessionals = async (serviceId: string): Promise<string[]> => {
+    const { data, error } = await supabase
+        .from('service_professionals')
+        .select('professional_id')
+        .eq('service_id', serviceId);
+    
+    if (error) {
+        console.error("Error fetching linked professionals:", error);
+        return [];
+    }
+    return data.map(item => item.professional_id);
   };
 
   const deleteService = async (id: string) => {
@@ -284,6 +337,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addProfessionalBlock,
         removeProfessionalBlock: async () => { console.log("removeProfessionalBlock called"); },
         fetchProfessionalBlocks: async () => { console.log("fetchProfessionalBlocks called"); return []; },
+        fetchServiceProfessionals,
         isAuthenticated,
         googleCalendarConnected,
         toggleGoogleCalendar: () => setGoogleCalendarConnected(!googleCalendarConnected),
