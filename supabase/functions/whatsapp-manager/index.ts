@@ -47,7 +47,6 @@ serve(async (req) => {
   }
 
   try {
-    // **NOVA VALIDAÇÃO DE VARIÁVEIS DE AMBIENTE**
     const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL');
     const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
     const APP_URL = Deno.env.get('NEXT_PUBLIC_APP_URL');

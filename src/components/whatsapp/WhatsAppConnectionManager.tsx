@@ -51,7 +51,7 @@ export const WhatsAppConnectionManager: React.FC = () => {
   useEffect(() => {
     const fetchInstanceFromDB = async () => {
       setStatus('loading');
-      const { data: user } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         setStatus('error');
         setError("Usuário não autenticado.");
