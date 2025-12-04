@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Loader2, CheckCircle2, AlertTriangle, Power, Plus, QrCode, Copy, Eye, EyeOff, Save } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertTriangle, Power, QrCode, Copy, Eye, EyeOff, Save, Link as LinkIcon } from 'lucide-react';
 
 type InstanceStatus = 'loading' | 'no_instance' | 'created' | 'connecting' | 'connected' | 'error';
 
@@ -20,8 +20,9 @@ export const WhatsAppConnectionManager: React.FC = () => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   
-  // Novo estado para o formulário de criação
+  // Form State
   const [newInstanceName, setNewInstanceName] = useState("");
+  const [newApiKey, setNewApiKey] = useState("");
 
   const checkEvolutionStatus = useCallback(async () => {
     try {
@@ -30,9 +31,10 @@ export const WhatsAppConnectionManager: React.FC = () => {
       });
 
       if (error) {
-        if (error.context?.status === 404) {
-          setStatus('no_instance');
-          setInstance(null);
+        // Only reset if specifically not found (404-like behavior from logic)
+        if (data && data.status === 'no_instance') {
+            setStatus('no_instance');
+            setInstance(null);
         }
         return;
       }
@@ -86,10 +88,10 @@ export const WhatsAppConnectionManager: React.FC = () => {
     }
   }, [status, checkEvolutionStatus]);
 
-  const handleCreateInstance = async (e: React.FormEvent) => {
+  const handleManualConnect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newInstanceName.trim()) {
-      setError("Por favor, digite um nome para a instância.");
+    if (!newInstanceName.trim() || !newApiKey.trim()) {
+      setError("Preencha o nome da instância e a API Key.");
       return;
     }
 
@@ -98,22 +100,22 @@ export const WhatsAppConnectionManager: React.FC = () => {
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
         method: 'POST',
-        body: { instanceName: newInstanceName } // Envia o nome digitado pelo usuário
+        body: { 
+            instanceName: newInstanceName,
+            apiKey: newApiKey 
+        }
       });
       
-      if (error) throw error;
+      if (error) throw new Error(error.message || "Erro ao conectar.");
+      if (data.error) throw new Error(data.error);
       
       setInstance(data);
-      setStatus('created');
-      setNewInstanceName(""); // Limpa o input
+      setStatus(data.status === 'open' ? 'connected' : 'created');
+      setNewInstanceName(""); 
+      setNewApiKey("");
     } catch (err: any) {
-      console.error("Erro criação:", err);
-      // Tenta extrair mensagem de erro mais amigável se possível
-      let msg = err.message || 'Erro ao criar instância.';
-      try {
-         const parsed = JSON.parse(err.message);
-         if (parsed.error) msg = parsed.error;
-      } catch (e) {}
+      console.error("Erro conexão:", err);
+      let msg = err.message || 'Erro ao conectar instância.';
       setError(msg);
     } finally {
       setActionLoading(false);
@@ -127,8 +129,11 @@ export const WhatsAppConnectionManager: React.FC = () => {
       const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
         method: 'PUT', 
       });
+      
       if (error) throw error;
-      setInstance(data);
+      if (data.error) throw new Error(data.error);
+
+      setInstance(prev => ({ ...prev!, qr_code: data.qr_code, status: 'connecting' }));
       setStatus('connecting');
     } catch (err: any) {
       setError(err.message || 'Erro ao gerar QR Code.');
@@ -138,7 +143,7 @@ export const WhatsAppConnectionManager: React.FC = () => {
   };
 
   const handleDeleteInstance = async () => {
-    if (!window.confirm("Tem certeza que deseja excluir esta instância?")) return;
+    if (!window.confirm("Tem certeza que deseja desconectar esta instância?")) return;
     setActionLoading(true);
     try {
       await supabase.functions.invoke('whatsapp-manager', { method: 'DELETE' });
@@ -153,7 +158,7 @@ export const WhatsAppConnectionManager: React.FC = () => {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert("Copiado para a área de transferência!");
+    alert("Copiado!");
   };
 
   if (status === 'loading') {
@@ -171,33 +176,36 @@ export const WhatsAppConnectionManager: React.FC = () => {
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
             <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="WhatsApp" className="h-8 w-8" />
             </div>
-            <h3 className="text-lg font-bold text-gray-900">Nova Instância</h3>
+            <h3 className="text-lg font-bold text-gray-900">Conectar WhatsApp</h3>
             <p className="mt-2 max-w-md text-sm text-gray-500">
-            Configure sua instância para conectar ao WhatsApp.
+            Insira os dados da sua instância criada na Evolution API.
             </p>
         </div>
 
-        <form onSubmit={handleCreateInstance} className="max-w-md mx-auto space-y-4">
+        <form onSubmit={handleManualConnect} className="max-w-md mx-auto space-y-4">
             <div>
-                <label htmlFor="instanceName" className="block text-sm font-medium text-gray-700 text-left">Nome da Instância *</label>
+                <label htmlFor="instanceName" className="block text-sm font-medium text-gray-700 text-left">Nome da Instância</label>
                 <input 
                     type="text" 
                     id="instanceName"
                     value={newInstanceName}
                     onChange={(e) => setNewInstanceName(e.target.value)}
-                    placeholder="Ex: Minha Barbearia"
+                    placeholder="Ex: MinhaBarbearia"
                     className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                     required
                 />
             </div>
             
             <div>
-                <label className="block text-sm font-medium text-gray-700 text-left">Channel</label>
+                <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700 text-left">Instance API Key</label>
                 <input 
                     type="text" 
-                    value="Baileys"
-                    disabled
-                    className="mt-1 block w-full rounded-lg border-gray-300 bg-gray-100 text-gray-500 shadow-sm sm:text-sm cursor-not-allowed"
+                    id="apiKey"
+                    value={newApiKey}
+                    onChange={(e) => setNewApiKey(e.target.value)}
+                    placeholder="Cole a chave da instância aqui"
+                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm font-mono"
+                    required
                 />
             </div>
 
@@ -206,8 +214,8 @@ export const WhatsAppConnectionManager: React.FC = () => {
                 disabled={actionLoading}
                 className="w-full flex justify-center items-center rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-700 disabled:opacity-70 mt-6"
             >
-                {actionLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                Salvar e Criar
+                {actionLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <LinkIcon className="mr-2 h-5 w-5" />}
+                Salvar e Conectar
             </button>
         </form>
 
@@ -231,19 +239,19 @@ export const WhatsAppConnectionManager: React.FC = () => {
           </div>
           <div>
             <h3 className="font-bold text-gray-900">{instance?.instance_name}</h3>
-            <p className="text-xs text-gray-500">Evolution API Instance</p>
+            <p className="text-xs text-gray-500">Conectado via Evolution API</p>
           </div>
         </div>
         <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${status === 'connected' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
           <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-          {status === 'connected' ? 'Conectado' : status === 'connecting' ? 'Conectando...' : 'Desconectado'}
+          {status === 'connected' ? 'Conectado' : status === 'connecting' ? 'Conectando...' : 'Aguardando'}
         </div>
       </div>
 
       <div className="p-6 space-y-6">
         {/* API Key Section */}
         <div className="bg-gray-900 rounded-lg p-4">
-          <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">API Key (Token)</label>
+          <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">API Key Configurada</label>
           <div className="mt-1 flex items-center gap-2">
             <code className="flex-1 font-mono text-sm text-green-400 truncate">
               {showApiKey ? instance?.api_key : '•'.repeat(40)}
@@ -294,8 +302,8 @@ export const WhatsAppConnectionManager: React.FC = () => {
         ) : (
           <div className="flex items-center justify-between p-6 bg-yellow-50 rounded-lg border border-yellow-100">
             <div>
-              <h4 className="font-bold text-yellow-900">Instância Criada</h4>
-              <p className="text-sm text-yellow-700 mt-1">Sua instância "{instance?.instance_name}" está pronta. Gere o QR Code para conectar.</p>
+              <h4 className="font-bold text-yellow-900">Aguardando Conexão</h4>
+              <p className="text-sm text-yellow-700 mt-1">Instância configurada. Se ainda não conectou, gere o QR Code.</p>
             </div>
             <button
               onClick={handleGetQRCode}
@@ -319,7 +327,7 @@ export const WhatsAppConnectionManager: React.FC = () => {
       {status !== 'no_instance' && (
         <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 flex justify-end">
            <button onClick={handleDeleteInstance} className="text-xs text-gray-500 hover:text-red-600 flex items-center gap-1">
-             <Power className="h-3 w-3" /> Excluir Instância
+             <Power className="h-3 w-3" /> Remover Configuração
            </button>
         </div>
       )}
