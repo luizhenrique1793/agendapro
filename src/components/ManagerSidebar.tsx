@@ -7,8 +7,7 @@ import {
   LogOut,
   Scissors,
   Store,
-  Users,
-  MessageSquare
+  Users
 } from "lucide-react";
 import { useApp } from "../store";
 import { useAuth } from "../context/AuthContext";
@@ -18,16 +17,16 @@ export const ManagerSidebar: React.FC = () => {
   const { logout, currentBusiness } = useApp();
   const { user } = useAuth();
 
-  const isActive = (path: string) => location.pathname.startsWith(path);
+  const isActive = (path: string) => location.pathname === path;
 
   // Business Manager Items
   const navItems = [
-    { path: "/manager", label: "Meu Negócio", icon: LayoutDashboard, exact: true },
+    { path: "/manager", label: "Meu Negócio", icon: LayoutDashboard },
     { path: "/manager/calendar", label: "Agenda", icon: Calendar },
     { path: "/manager/clients", label: "Clientes", icon: Users },
     { path: "/manager/professionals", label: "Profissionais", icon: Users },
     { path: "/manager/services", label: "Serviços", icon: Scissors },
-    { path: "/manager/settings", label: "Configurações", icon: Settings, subPath: "/manager/settings/whatsapp" },
+    { path: "/manager/settings", label: "Configurações", icon: Settings },
   ];
 
   return (
@@ -46,35 +45,19 @@ export const ManagerSidebar: React.FC = () => {
             <li key={item.path}>
               <Link
                 to={item.path}
-                className={`flex items-center rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                  (item.exact ? location.pathname === item.path : location.pathname.startsWith(item.path))
+                className={`flex items-center rounded-lg px-4 py-3 text-sm font-medium transition-colors ${isActive(item.path)
                     ? "bg-primary-50 text-primary-700"
                     : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                }`}
+                  }`}
               >
                 <item.icon
-                  className={`mr-3 h-5 w-5 ${
-                    (item.exact ? location.pathname === item.path : location.pathname.startsWith(item.path)) ? "text-primary-600" : "text-gray-400"
-                  }`}
+                  className={`mr-3 h-5 w-5 ${isActive(item.path) ? "text-primary-600" : "text-gray-400"
+                    }`}
                 />
                 {item.label}
               </Link>
             </li>
           ))}
-           {/* Sub-item para WhatsApp */}
-           <li className="pl-5">
-             <Link
-                to="/manager/settings/whatsapp"
-                className={`flex items-center rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                  location.pathname === "/manager/settings/whatsapp"
-                    ? "text-primary-700"
-                    : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
-                <MessageSquare className={`mr-3 h-4 w-4 ${ location.pathname === "/manager/settings/whatsapp" ? "text-primary-600" : "text-gray-400" }`} />
-                WhatsApp
-              </Link>
-           </li>
         </ul>
       </nav>
 
