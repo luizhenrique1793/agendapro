@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Loader2, CheckCircle2, AlertTriangle, Power, ScanLine } from 'lucide-react';
 
-type InstanceStatus = 'loading' | 'not_found' | 'disconnected' | 'connecting' | 'connected' | 'error';
+type InstanceStatus = 'loading' | 'no_instance' | 'connecting' | 'connected' | 'error';
 
 interface WhatsAppInstance {
   id: string;
@@ -16,15 +16,17 @@ export const WhatsAppConnectionManager: React.FC = () => {
   const [status, setStatus] = useState<InstanceStatus>('loading');
   const [error, setError] = useState<string | null>(null);
 
-  const fetchInstanceStatus = useCallback(async () => {
+  // Função para verificar o status da instância na Evolution API
+  const checkEvolutionStatus = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
         method: 'GET',
       });
 
       if (error) {
+        // Se a função retornar 404, significa que a instância foi limpa ou não existe mais.
         if (error.context?.status === 404) {
-          setStatus('not_found');
+          setStatus('no_instance');
           setInstance(null);
         } else {
           throw error;
@@ -33,10 +35,9 @@ export const WhatsAppConnectionManager: React.FC = () => {
         setInstance(data);
         if (data.status === 'open') {
           setStatus('connected');
-        } else if (data.status === 'connecting' || data.qr_code) {
-          setStatus('connecting');
         } else {
-          setStatus('disconnected');
+          // Continua no estado de conexão se ainda não estiver 'open'
+          setStatus('connecting');
         }
       }
     } catch (err: any) {
@@ -46,33 +47,63 @@ export const WhatsAppConnectionManager: React.FC = () => {
     }
   }, []);
 
+  // 1. Apenas verifica se a instância existe no nosso banco de dados ao carregar
   useEffect(() => {
-    fetchInstanceStatus();
-    const interval = setInterval(() => {
-      // Só faz polling se estiver em um estado intermediário
-      if (status === 'connecting' || status === 'loading') {
-        fetchInstanceStatus();
+    const fetchInstanceFromDB = async () => {
+      setStatus('loading');
+      const { data: user } = await supabase.auth.getUser();
+      if (!user) {
+        setStatus('error');
+        setError("Usuário não autenticado.");
+        return;
       }
-    }, 5000); // Polling a cada 5 segundos
 
-    return () => clearInterval(interval);
-  }, [fetchInstanceStatus, status]);
+      const { data, error } = await supabase
+        .from('whatsapp_instances')
+        .select('*')
+        .limit(1)
+        .single();
 
-  const handleConnect = async () => {
+      if (error || !data) {
+        setInstance(null);
+        setStatus('no_instance');
+      } else {
+        setInstance(data);
+        // Se a instância existe, verificamos o status real dela
+        checkEvolutionStatus();
+      }
+    };
+
+    fetchInstanceFromDB();
+  }, [checkEvolutionStatus]);
+
+  // 2. Inicia a verificação periódica APENAS se estivermos no estado 'connecting'
+  useEffect(() => {
+    if (status === 'connecting') {
+      const interval = setInterval(checkEvolutionStatus, 5000); // Polling a cada 5 segundos
+      return () => clearInterval(interval);
+    }
+  }, [status, checkEvolutionStatus]);
+
+  // 3. Função para CRIAR a instância (chama o POST)
+  const handleCreateInstance = async () => {
     setStatus('loading');
     setError(null);
     try {
-      const { error } = await supabase.functions.invoke('whatsapp-manager', {
+      const { data, error } = await supabase.functions.invoke('whatsapp-manager', {
         method: 'POST',
       });
       if (error) throw error;
-      await fetchInstanceStatus(); // Busca o novo estado
+      // Após criar, o estado muda para 'connecting' e o polling começa
+      setInstance(data);
+      setStatus('connecting');
     } catch (err: any) {
       setError(err.message || 'Falha ao criar instância.');
       setStatus('error');
     }
   };
 
+  // 4. Função para DESCONECTAR (chama o DELETE)
   const handleDisconnect = async () => {
     if (!window.confirm("Tem certeza que deseja desconectar sua conta do WhatsApp?")) return;
     
@@ -83,7 +114,7 @@ export const WhatsAppConnectionManager: React.FC = () => {
         method: 'DELETE',
       });
       if (error) throw error;
-      setStatus('not_found');
+      setStatus('no_instance');
       setInstance(null);
     } catch (err: any) {
       setError(err.message || 'Falha ao desconectar.');
@@ -97,13 +128,12 @@ export const WhatsAppConnectionManager: React.FC = () => {
         return <div className="flex flex-col items-center text-center"><Loader2 className="h-10 w-10 animate-spin text-primary-600" /><p className="mt-2 text-sm text-gray-500">Verificando conexão...</p></div>;
       case 'error':
         return <div className="flex flex-col items-center text-center text-red-600"><AlertTriangle className="h-10 w-10" /><p className="mt-2 text-sm font-semibold">Ocorreu um erro</p><p className="text-xs">{error}</p></div>;
-      case 'not_found':
-      case 'disconnected':
+      case 'no_instance':
         return (
           <div className="text-center">
             <h3 className="text-lg font-semibold text-gray-800">Nenhuma conta conectada</h3>
             <p className="mt-1 text-sm text-gray-500">Clique no botão abaixo para gerar um QR Code e conectar seu WhatsApp.</p>
-            <button onClick={handleConnect} className="mt-4 inline-flex items-center rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700">
+            <button onClick={handleCreateInstance} className="mt-4 inline-flex items-center rounded-lg bg-green-600 px-4 py-2 font-semibold text-white hover:bg-green-700">
               <ScanLine className="mr-2 h-5 w-5" /> Conectar WhatsApp
             </button>
           </div>
@@ -115,7 +145,7 @@ export const WhatsAppConnectionManager: React.FC = () => {
               {instance?.qr_code ? (
                 <img src={`data:image/png;base64,${instance.qr_code}`} alt="QR Code" className="h-48 w-48" />
               ) : (
-                <div className="h-48 w-48 flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-gray-400" /></div>
+                <div className="h-48 w-48 flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-gray-400" /><p className="text-sm text-gray-500 ml-2">Gerando QR Code...</p></div>
               )}
             </div>
             <div>
