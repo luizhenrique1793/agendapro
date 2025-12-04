@@ -77,6 +77,12 @@ export interface BusinessStats {
   growth: number;
 }
 
+export interface EvolutionApiConfig {
+  serverUrl: string;
+  apiKey: string;
+  instanceName: string;
+}
+
 export interface Business {
   id: string;
   name: string;
@@ -91,6 +97,7 @@ export interface Business {
     intervals: { start: string; end: string }[];
     active: boolean;
   }[];
+  evolution_api_config?: EvolutionApiConfig;
 }
 
 export interface User {
