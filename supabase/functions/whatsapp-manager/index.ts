@@ -35,7 +35,9 @@ const evolutionClient = {
         throw new Error(`Evolution API Error: ${response.statusText}`);
       }
     }
-    return response.json();
+    // Handle cases where response might be empty
+    const responseText = await response.text();
+    return responseText ? JSON.parse(responseText) : {};
   },
 
   createInstance(name: string) {
@@ -62,26 +64,19 @@ serve(async (req) => {
   }
 
   try {
-    // Criar um cliente Supabase que atua em nome do usuário autenticado
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
       { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
     );
 
-    // Usar a função RPC para obter o business_id de forma segura
     const { data: businessId, error: rpcError } = await supabase.rpc('get_my_business_id');
-
     if (rpcError || !businessId) {
-      console.error("RPC Error:", rpcError);
       throw new Error("Usuário não autenticado ou sem negócio vinculado.");
     }
     
     const instanceName = `business_${businessId.replace(/-/g, '')}`;
 
-    // --- Lógica de Roteamento ---
-
-    // GET: Obter status da instância
     if (req.method === 'GET') {
       const { data: existingInstance } = await supabase
         .from('whatsapp_instances')
@@ -90,18 +85,17 @@ serve(async (req) => {
         .single();
 
       if (!existingInstance) {
-        return new Response(JSON.stringify({ status: 'not_found' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 404,
-        });
+        return new Response(JSON.stringify({ status: 'not_found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       
       const evolutionState = await evolutionClient.getConnectionState(instanceName);
-      
-      if (existingInstance.status !== evolutionState.instance.state) {
+      const currentState = evolutionState?.instance?.state;
+      const qrCode = evolutionState?.instance?.qrcode?.base64;
+
+      if (currentState && existingInstance.status !== currentState) {
           const { data: updatedInstance } = await supabase
               .from('whatsapp_instances')
-              .update({ status: evolutionState.instance.state, qr_code: evolutionState.instance.qrcode?.base64 })
+              .update({ status: currentState, qr_code: qrCode })
               .eq('id', existingInstance.id)
               .select()
               .single();
@@ -111,21 +105,20 @@ serve(async (req) => {
       return new Response(JSON.stringify(existingInstance), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // POST: Criar uma nova instância
     if (req.method === 'POST') {
       const evolutionData = await evolutionClient.createInstance(instanceName);
       
       const newInstance = {
         business_id: businessId,
         instance_name: instanceName,
-        api_key: evolutionData.hash.apikey,
-        qr_code: evolutionData.instance.qrcode?.base64,
+        api_key: evolutionData?.hash?.apikey,
+        qr_code: evolutionData?.instance?.qrcode?.base64,
         status: 'connecting',
       };
 
       const { data, error } = await supabase
         .from('whatsapp_instances')
-        .insert(newInstance)
+        .upsert(newInstance, { onConflict: 'business_id' })
         .select()
         .single();
 
@@ -133,7 +126,6 @@ serve(async (req) => {
       return new Response(JSON.stringify(data), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // DELETE: Desconectar e remover instância
     if (req.method === 'DELETE') {
       await evolutionClient.logoutInstance(instanceName);
       
@@ -146,16 +138,10 @@ serve(async (req) => {
       return new Response(JSON.stringify({ message: 'Instância desconectada com sucesso.' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    return new Response(JSON.stringify({ error: 'Método não permitido' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 405,
-    });
+    return new Response(JSON.stringify({ error: 'Método não permitido' }), { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
     console.error("Edge Function Error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500,
-    });
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
