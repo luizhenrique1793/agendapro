@@ -26,6 +26,7 @@ const WhatsappSettings: React.FC = () => {
   const [sendingTest, setSendingTest] = useState(false);
   const [testResult, setTestResult] = useState<{success: boolean; message: string} | null>(null);
 
+  // Sincroniza o estado local com os dados do negócio quando o componente monta ou currentBusiness muda
   useEffect(() => {
     if (currentBusiness) {
       if (currentBusiness.evolution_api_config) {
@@ -35,7 +36,7 @@ const WhatsappSettings: React.FC = () => {
             instanceName: currentBusiness.evolution_api_config.instanceName || ""
         });
       }
-      // @ts-ignore - Property added via SQL, might not be in types yet
+      // Garante que o valor venha do banco, default false se undefined
       setAutoReminders(currentBusiness.automatic_reminders || false);
     }
   }, [currentBusiness]);
@@ -45,40 +46,38 @@ const WhatsappSettings: React.FC = () => {
     setIsSaving(true);
     setSaveError(null);
 
-    // Debug log
-    console.log("---------------- DEBUG START ----------------");
-    console.log("Tentando salvar configuração para o negócio ID:", currentBusiness?.id);
+    // Debug: Mostra no console o que está sendo enviado
+    console.log("Salvando configurações...", {
+        config,
+        autoReminders,
+        businessId: currentBusiness?.id
+    });
     
+    // Payload que será enviado para o updateBusiness (Supabase)
     const payload = { 
         evolution_api_config: config,
-        // @ts-ignore
         automatic_reminders: autoReminders
     };
-    
-    console.log("Payload a ser enviado:", payload);
 
     try {
         if (!currentBusiness?.id) {
             throw new Error("ID do negócio não encontrado. Verifique se você está logado e vinculado a um negócio.");
         }
 
-        // @ts-ignore
+        // Chama a função da store que atualiza no banco
         await updateBusiness(payload);
         alert("Configurações salvas com sucesso!");
     } catch (error: any) {
-        console.error("ERRO CRÍTICO AO SALVAR:", error);
+        console.error("ERRO AO SALVAR:", error);
         
-        // Estrutura o erro para exibição
         setSaveError({
             message: error.message || "Erro desconhecido",
             details: error.details || null,
             hint: error.hint || null,
-            code: error.code || null,
-            stack: error.stack || null
+            code: error.code || null
         });
     } finally {
         setIsSaving(false);
-        console.log("---------------- DEBUG END ----------------");
     }
   };
 
@@ -167,7 +166,7 @@ const WhatsappSettings: React.FC = () => {
              </div>
           </div>
 
-          {/* Debug Error Box */}
+          {/* Card de Erro (Debug) */}
           {saveError && (
             <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-900 shadow-sm animate-in fade-in slide-in-from-top-2">
                 <div className="flex items-start gap-3">
@@ -180,7 +179,6 @@ const WhatsappSettings: React.FC = () => {
                             {saveError.code && <p><strong>Code:</strong> {saveError.code}</p>}
                             {saveError.details && <p><strong>Details:</strong> {saveError.details}</p>}
                             {saveError.hint && <p><strong>Hint:</strong> {saveError.hint}</p>}
-                            <p className="mt-2 text-gray-500">Abra o console do navegador (F12) para ver o log completo.</p>
                         </div>
                     </div>
                     <button 
@@ -252,7 +250,7 @@ const WhatsappSettings: React.FC = () => {
                     </div>
                 </div>
                 
-                {/* Auto Reminders Toggle */}
+                {/* Toggle de Lembretes Automáticos */}
                 <div className="mt-6 border-t border-gray-100 pt-6">
                     <div className="flex items-start gap-4 rounded-lg border border-indigo-100 bg-indigo-50 p-4">
                         <BellRing className="mt-1 h-6 w-6 text-indigo-600" />

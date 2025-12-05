@@ -68,6 +68,7 @@ export interface Appointment {
   payment_method?: string;
   amount_paid?: number;
   paid_at?: string;
+  reminder_sent?: boolean;
 }
 
 export interface BusinessStats {
@@ -98,6 +99,7 @@ export interface Business {
     active: boolean;
   }[];
   evolution_api_config?: EvolutionApiConfig;
+  automatic_reminders?: boolean; // Campo adicionado para lembretes automáticos
 }
 
 export interface User {
