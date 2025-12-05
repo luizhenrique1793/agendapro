@@ -101,6 +101,37 @@ export interface SocialMedia {
   whatsapp?: string;
 }
 
+// Configuração do Agente IA para WhatsApp
+export interface AssistantConfig {
+  active: boolean; // Se o bot deve responder ou não
+  identity: {
+    name: string; // Nome do agente (ex: Luna)
+    tone: string; // Tom de voz (ex: formal, descolado)
+    description: string; // Breve descrição da persona
+  };
+  messages: {
+    welcome_new: string; // Saudação para novos contatos
+    welcome_existing: string; // Saudação para clientes recorrentes
+    confirmation_booking: string; // Mensagem de sucesso ao agendar
+    confirmation_reschedule: string; // Mensagem de sucesso ao reagendar
+    confirmation_cancellation: string; // Mensagem de sucesso ao cancelar
+    no_slots: string; // Quando não há horários
+    service_unavailable: string; // Serviço não encontrado/indisponível
+    professional_unavailable: string; // Profissional não encontrado
+  };
+  persuasion: {
+    benefits: string; // Lista de benefícios do negócio
+    extra_phrases: string; // Frases de efeito para usar
+  };
+  behavior: {
+    ask_if_new_client: boolean; // Perguntar se já é cliente?
+    search_by_phone: boolean; // Buscar histórico pelo WhatsApp?
+    show_services_first: boolean; // Listar serviços logo no início?
+    require_confirmation: boolean; // Pedir "Sim" antes de executar ação?
+    persuasive_mode: boolean; // Ativar modo de vendas mais agressivo?
+  };
+}
+
 export interface Business {
   id: string;
   name: string;
@@ -123,6 +154,7 @@ export interface Business {
   }[];
   evolution_api_config?: EvolutionApiConfig;
   automatic_reminders?: boolean;
+  assistant_config?: AssistantConfig; // Nova configuração do Agente IA
 }
 
 export interface User {
