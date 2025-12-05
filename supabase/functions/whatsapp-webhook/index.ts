@@ -18,6 +18,14 @@ interface AssistantConfig {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  // MÓDULO DE IA DESATIVADO TEMPORARIAMENTE
+  // Motivo: reduzir consumo de créditos durante período de testes
+  // Para reativar: remover o return abaixo
+  return new Response(JSON.stringify({ status: "disabled_temporarily", message: "IA desativada temporariamente" }), { 
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    status: 200 
+  });
+
   try {
     const payload = await req.json();
     const data = payload.data || payload;
