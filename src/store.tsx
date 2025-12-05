@@ -24,6 +24,7 @@ interface AppContextType {
   updateProfessional: (professional: Professional) => Promise<void>;
   deleteProfessional: (id: string) => Promise<void>;
   uploadProfessionalAvatar: (file: File) => Promise<string>;
+  uploadBusinessPhoto: (file: File) => Promise<string>;
   addUser: (user: User) => void;
   addClient: (client: Client) => void;
   updateClient: (client: Client) => void;
@@ -123,20 +124,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .from('businesses')
       .update(businessUpdate)
       .eq('id', currentBusiness.id)
-      .select('id', { count: 'exact' }); // Conta quantos registros foram afetados
+      .select('id', { count: 'exact' }); 
 
-    // Se houver erro na requisição, lança para ser capturado no frontend
     if (error) {
         console.error("Erro no updateBusiness:", error);
         throw error;
     }
     
-    // Se nenhum registro foi atualizado, pode ser problema de RLS
     if (count === 0) {
         throw new Error("Nenhum registro foi atualizado. Verifique suas permissões (RLS) ou se o negócio ainda existe.");
     }
 
-    // Recarrega os dados para garantir que o frontend esteja sincronizado
     await fetchData();
   };
 
@@ -265,6 +263,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return data.publicUrl;
   };
 
+  // Nova função para upload de fotos do negócio
+  const uploadBusinessPhoto = async (file: File): Promise<string> => {
+    if (!file) throw new Error("Nenhum arquivo selecionado.");
+    
+    // Podemos reutilizar o bucket de avatares ou criar um novo. 
+    // Por simplicidade, usaremos o mesmo bucket mas com prefixo 'business-photos/' se possível,
+    // ou apenas nomes únicos. Vamos usar 'business-' prefixo no nome.
+    const fileExt = file.name.split('.').pop();
+    const fileName = `business-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `public/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('professional-avatars') // Reusing bucket for now
+      .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+      .from('professional-avatars')
+      .getPublicUrl(filePath);
+      
+    return data.publicUrl;
+  };
+
   const addProfessionalBlock = async (block: Omit<ProfessionalBlock, "id">) => {
     if (!currentBusiness?.id) throw new Error("Negócio não identificado.");
     const { error } = await supabase.from('professional_blocks').insert([{ ...block, business_id: currentBusiness.id }]);
@@ -337,6 +359,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         completeAppointment,
         rescheduleAppointment,
         uploadProfessionalAvatar,
+        uploadBusinessPhoto,
         addUser: () => { console.log("addUser called"); },
         addClient: () => { console.log("addClient called"); },
         updateClient: () => { console.log("updateClient called"); },

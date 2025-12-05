@@ -84,6 +84,23 @@ export interface EvolutionApiConfig {
   instanceName: string;
 }
 
+export interface AddressDetails {
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  zipCode: string;
+}
+
+export interface SocialMedia {
+  instagram?: string;
+  facebook?: string;
+  website?: string;
+  whatsapp?: string;
+}
+
 export interface Business {
   id: string;
   name: string;
@@ -92,14 +109,20 @@ export interface Business {
   city: string;
   status: "Ativo" | "Inativo";
   phone?: string;
-  address?: string;
+  secondary_phone?: string;
+  address?: string; // Mantido para compatibilidade, mas o foco será address_details
+  address_details?: AddressDetails;
+  description?: string;
+  photos?: string[];
+  payment_methods?: string[];
+  social_media?: SocialMedia;
   working_hours?: {
     day: string;
     intervals: { start: string; end: string }[];
     active: boolean;
   }[];
   evolution_api_config?: EvolutionApiConfig;
-  automatic_reminders?: boolean; // Atualiza o campo de lembretes automáticos no banco de dados
+  automatic_reminders?: boolean;
 }
 
 export interface User {
