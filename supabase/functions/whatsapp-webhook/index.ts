@@ -20,16 +20,14 @@ serve(async (req) => {
 
   try {
     const payload = await req.json();
-    
-    // Validação básica do Payload Evolution API
     const data = payload.data || payload;
     
-    // Ignorar mensagens próprias ou status
+    // Ignorar status ou mensagens próprias
     if (data.key?.fromMe || !data.message) {
       return new Response(JSON.stringify({ status: 'ignored' }), { headers: corsHeaders });
     }
 
-    const senderPhone = data.key.remoteJid; // Ex: 5511999999999@s.whatsapp.net
+    const senderPhone = data.key.remoteJid; 
     const incomingText = data.message.conversation || data.message.extendedTextMessage?.text;
     const instanceName = payload.instance || data.instance;
 
@@ -51,6 +49,7 @@ serve(async (req) => {
       .limit(1);
 
     if (bError || !businesses || businesses.length === 0) {
+      console.error("Negócio não encontrado para instância:", instanceName);
       return new Response(JSON.stringify({ error: 'Business not found' }), { status: 404 });
     }
 
@@ -70,8 +69,7 @@ serve(async (req) => {
       content: incomingText
     });
 
-    // 3. Buscar histórico recente (Memória)
-    // Pegamos as últimas 10 mensagens para contexto
+    // 3. Buscar histórico para contexto (últimas 10)
     const { data: history } = await supabaseAdmin
       .from('chat_history')
       .select('role, content')
@@ -80,13 +78,36 @@ serve(async (req) => {
       .order('created_at', { ascending: false })
       .limit(10);
 
-    // Reverter para ordem cronológica (mais antigo -> mais novo)
-    const chatHistory = (history || []).reverse().map(msg => ({
+    // Converter para formato Gemini
+    const rawHistory = (history || []).reverse().map(msg => ({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.content }]
     }));
 
-    // 4. Construir Prompt do Sistema
+    // SANITIZAÇÃO: O Gemini rejeita mensagens com o mesmo role consecutivas (ex: user, user).
+    // Vamos agrupar mensagens consecutivas do mesmo autor.
+    const chatHistory: any[] = [];
+    if (rawHistory.length > 0) {
+        let currentMsg = rawHistory[0];
+        
+        for (let i = 1; i < rawHistory.length; i++) {
+            const nextMsg = rawHistory[i];
+            if (nextMsg.role === currentMsg.role) {
+                // Mesma role: concatena o texto
+                currentMsg.parts[0].text += "\n" + nextMsg.parts[0].text;
+            } else {
+                // Role diferente: empurra a anterior e inicia nova
+                chatHistory.push(currentMsg);
+                currentMsg = nextMsg;
+            }
+        }
+        chatHistory.push(currentMsg);
+    }
+
+    // Se por acaso a última mensagem não for do usuário (ex: erro anterior), a IA não deve responder modelo->modelo
+    // Mas no nosso fluxo, acabamos de salvar a msg do user, então a última deve ser user.
+
+    // 4. Prompt do Sistema
     const servicesList = business.services?.map((s: any) => `- ${s.name} (R$ ${s.price})`).join('\n');
     const bookingLink = `${Deno.env.get('NEXT_PUBLIC_APP_URL') || 'https://agendapro.com'}/#/book/${business.slug}`;
 
@@ -103,36 +124,51 @@ serve(async (req) => {
       ${servicesList}
       - Link de agendamento: ${bookingLink}
 
-      REGRAS:
-      - Responda de forma curta (WhatsApp style).
-      - SEMPRE envie o link ${bookingLink} para agendamentos.
-      - Use as mensagens padrão configuradas se apropriado.
+      REGRAS IMPORTANTES:
+      - Responda de forma curta e direta (estilo WhatsApp).
+      - NUNCA invente horários. Se perguntarem disponibilidade, mande o link.
+      - Use as mensagens padrão configuradas se fizer sentido.
+      - Link para agendar: ${bookingLink}
     `;
 
-    // 5. Determinar API Key (Negócio > Global)
+    // 5. Determinar API Key
     const apiKey = config.gemini_key || Deno.env.get('GEMINI_API_KEY');
     
     if (!apiKey) {
-      console.error("Nenhuma chave Gemini configurada.");
+      console.error("Sem API Key do Gemini configurada.");
       return new Response(JSON.stringify({ error: 'No API Key' }), { status: 500 });
     }
 
     // 6. Chamar IA
+    // Usamos system_instruction para separar o contexto do chat, evitando confusão de roles
     const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [
-          { role: 'user', parts: [{ text: systemPrompt }] }, // System instruction hack for Gemini Rest API
-          ...chatHistory // Inclui a mensagem atual do usuário que já foi salva no passo 2
-        ]
+        system_instruction: {
+            parts: [{ text: systemPrompt }]
+        },
+        contents: chatHistory
       })
     });
 
     const aiData = await aiResponse.json();
-    const replyText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, não entendi. Pode repetir?";
 
-    // 7. Salvar resposta da IA no histórico
+    // Tratamento de Erro da IA
+    if (aiData.error) {
+        console.error("Gemini API Error:", JSON.stringify(aiData.error));
+        // Não respondemos ao usuário o erro técnico, mas logamos para debug
+        return new Response(JSON.stringify({ error: aiData.error.message }), { status: 200 });
+    }
+
+    const replyText = aiData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!replyText) {
+        console.error("Resposta vazia da IA:", JSON.stringify(aiData));
+        return new Response(JSON.stringify({ error: 'Empty AI response' }), { status: 200 });
+    }
+
+    // 7. Salvar resposta
     await supabaseAdmin.from('chat_history').insert({
       business_id: business.id,
       contact_phone: senderPhone,
@@ -141,22 +177,24 @@ serve(async (req) => {
     });
 
     // 8. Enviar via Evolution API
-    const normalizedUrl = apiConfig.serverUrl.replace(/\/$/, "");
-    const sendEndpoint = `${normalizedUrl}/message/sendText/${apiConfig.instanceName}`;
-    const cleanPhone = senderPhone.replace('@s.whatsapp.net', '');
+    if (apiConfig && apiConfig.serverUrl && apiConfig.apiKey) {
+        const normalizedUrl = apiConfig.serverUrl.replace(/\/$/, "");
+        const sendEndpoint = `${normalizedUrl}/message/sendText/${apiConfig.instanceName}`;
+        const cleanPhone = senderPhone.replace('@s.whatsapp.net', '');
 
-    await fetch(sendEndpoint, {
-      method: 'POST',
-      headers: { 
-        'apikey': apiConfig.apiKey, 
-        'Content-Type': 'application/json' 
-      },
-      body: JSON.stringify({
-        number: cleanPhone,
-        text: replyText,
-        options: { delay: 1500, presence: "composing" }
-      })
-    });
+        await fetch(sendEndpoint, {
+            method: 'POST',
+            headers: { 
+                'apikey': apiConfig.apiKey, 
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify({
+                number: cleanPhone,
+                text: replyText,
+                options: { delay: 1500, presence: "composing" }
+            })
+        });
+    }
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
