@@ -118,19 +118,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateBusiness = async (businessUpdate: Partial<Business>) => {
     if (!currentBusiness?.id) throw new Error("Negócio não identificado.");
     
-    // Atualiza o campo de lembretes automáticos no banco de dados
+    // Tenta atualizar o negócio no Supabase
     const { error, count } = await supabase
       .from('businesses')
       .update(businessUpdate)
       .eq('id', currentBusiness.id)
-      .select('id', { count: 'exact' }); 
+      .select('id', { count: 'exact' }); // Conta quantos registros foram afetados
 
-    if (error) throw error;
+    // Se houver erro na requisição, lança para ser capturado no frontend
+    if (error) {
+        console.error("Erro no updateBusiness:", error);
+        throw error;
+    }
     
+    // Se nenhum registro foi atualizado, pode ser problema de RLS
     if (count === 0) {
         throw new Error("Nenhum registro foi atualizado. Verifique suas permissões (RLS) ou se o negócio ainda existe.");
     }
 
+    // Recarrega os dados para garantir que o frontend esteja sincronizado
     await fetchData();
   };
 

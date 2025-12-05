@@ -37,34 +37,45 @@ const WhatsappSettings: React.FC = () => {
             instanceName: currentBusiness.evolution_api_config.instanceName || ""
         });
       }
-      // Atualiza o estado local com o valor vindo do banco de dados
       // Garante que usamos o valor do banco, ou false se undefined/null
-      console.log("Current Business Loaded:", currentBusiness);
+      console.log("Current Business Loaded in WhatsappSettings:", currentBusiness);
+      console.log("Automatic Reminders Value:", currentBusiness.automatic_reminders);
       setAutoReminders(currentBusiness.automatic_reminders === true);
     }
   }, [currentBusiness]);
 
-  // Função dedicada para alternar os lembretes automáticos com salvamento imediato
+  // Função dedicada para alternar os lembretes automáticos com salvamento imediato e tratamento de erro
   const handleToggleReminders = async () => {
     if (!currentBusiness?.id) return;
     
     setTogglingReminders(true);
-    const newState = !autoReminders; // Inverte o estado atual
+    setSaveError(null); // Limpa erros anteriores
+    const newState = !autoReminders; // Calcula o novo estado esperado
 
     try {
-        console.log(`Atualizando lembretes automáticos para: ${newState}`);
+        console.log(`Tentando atualizar lembretes automáticos para: ${newState} (ID: ${currentBusiness.id})`);
         
         // Chama a função da store para atualizar APENAS este campo no banco de dados
         await updateBusiness({ automatic_reminders: newState });
         
-        // Atualiza o estado local para refletir a mudança
+        // Atualiza o estado local para refletir a mudança APÓS o sucesso do update
         setAutoReminders(newState);
         
         // Feedback visual simples
         // alert(newState ? "Lembretes ativados com sucesso!" : "Lembretes desativados.");
     } catch (error: any) {
-        console.error("Erro ao alternar lembretes:", error);
-        alert("Erro ao salvar a configuração de lembretes. Tente novamente.");
+        console.error("ERRO CRÍTICO ao alternar lembretes:", error);
+        
+        // Exibe o erro no frontend para o usuário não ficar no escuro
+        setSaveError({
+            message: `Erro ao salvar: ${error.message || "Erro desconhecido"}`,
+            details: error.details || error.hint || JSON.stringify(error),
+            code: error.code || "UNKNOWN"
+        });
+        
+        // Reverte o estado visual se o update falhar (opcional, mas boa prática)
+        // Como o updateBusiness recarrega os dados, o useEffect cuidará disso, 
+        // mas podemos forçar aqui se quisermos feedback instantâneo de falha.
     } finally {
         setTogglingReminders(false);
     }
@@ -195,7 +206,7 @@ const WhatsappSettings: React.FC = () => {
                 <div className="flex items-start gap-3">
                     <AlertTriangle className="h-6 w-6 shrink-0 text-red-600" />
                     <div className="flex-1 overflow-hidden">
-                        <h3 className="text-lg font-bold text-red-800">Erro ao Salvar Configurações</h3>
+                        <h3 className="text-lg font-bold text-red-800">Erro ao Salvar</h3>
                         <p className="mt-1 font-medium">{saveError.message}</p>
                         
                         <div className="mt-3 rounded bg-white/50 p-3 text-xs font-mono">
