@@ -36,8 +36,10 @@ const WhatsappSettings: React.FC = () => {
             instanceName: currentBusiness.evolution_api_config.instanceName || ""
         });
       }
-      // Garante que o valor venha do banco, default false se undefined
-      setAutoReminders(currentBusiness.automatic_reminders || false);
+      // Atualiza o campo de lembretes automáticos no banco de dados
+      // Garante que usamos o valor do banco, ou false se undefined/null
+      console.log("Current Business Loaded:", currentBusiness);
+      setAutoReminders(currentBusiness.automatic_reminders === true);
     }
   }, [currentBusiness]);
 
@@ -46,14 +48,9 @@ const WhatsappSettings: React.FC = () => {
     setIsSaving(true);
     setSaveError(null);
 
-    // Debug: Mostra no console o que está sendo enviado
-    console.log("Salvando configurações...", {
-        config,
-        autoReminders,
-        businessId: currentBusiness?.id
-    });
+    console.log("Saving automatic_reminders:", autoReminders);
     
-    // Payload que será enviado para o updateBusiness (Supabase)
+    // Atualiza o campo de lembretes automáticos no banco de dados
     const payload = { 
         evolution_api_config: config,
         automatic_reminders: autoReminders
@@ -261,6 +258,7 @@ const WhatsappSettings: React.FC = () => {
                             </p>
                         </div>
                         <label className="relative inline-flex cursor-pointer items-center">
+                            {/* Atualiza o campo de lembretes automáticos no banco de dados */}
                             <input 
                                 type="checkbox" 
                                 className="peer sr-only" 

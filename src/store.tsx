@@ -118,6 +118,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateBusiness = async (businessUpdate: Partial<Business>) => {
     if (!currentBusiness?.id) throw new Error("Negócio não identificado.");
     
+    // Atualiza o campo de lembretes automáticos no banco de dados
     const { error, count } = await supabase
       .from('businesses')
       .update(businessUpdate)

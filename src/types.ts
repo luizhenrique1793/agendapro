@@ -99,7 +99,7 @@ export interface Business {
     active: boolean;
   }[];
   evolution_api_config?: EvolutionApiConfig;
-  automatic_reminders?: boolean; // Campo adicionado para lembretes automáticos
+  automatic_reminders?: boolean; // Atualiza o campo de lembretes automáticos no banco de dados
 }
 
 export interface User {
