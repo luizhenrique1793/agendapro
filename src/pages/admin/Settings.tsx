@@ -17,7 +17,10 @@ import {
   Sparkles, 
   Settings as SettingsIcon,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Key,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { useApp } from "../../store";
 import { Business, AssistantConfig } from "../../types";
@@ -34,6 +37,7 @@ const defaultSchedule = [
 
 const defaultAssistantConfig: AssistantConfig = {
   active: true,
+  gemini_key: "",
   identity: {
     name: "Agente Virtual",
     tone: "Profissional e acolhedor",
@@ -67,6 +71,7 @@ const Settings: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'ai_agent'>('profile');
+  const [showKey, setShowKey] = useState(false);
   
   // Estado para o Perfil do Negócio
   const [formData, setFormData] = useState<Partial<Business>>({
@@ -515,6 +520,38 @@ const Settings: React.FC = () => {
                             {assistantData.active ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
                             {assistantData.active ? "Ativado" : "Desativado"}
                         </button>
+                    </div>
+
+                    {/* API Key Configuration */}
+                    <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                        <h2 className="mb-4 text-lg font-bold text-gray-900 flex items-center gap-2">
+                            <Key className="h-5 w-5 text-gray-400" />
+                            Configuração da IA (Gemini)
+                        </h2>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Gemini API Key</label>
+                            <div className="mt-1 relative rounded-md shadow-sm">
+                                <input
+                                    type={showKey ? "text" : "password"}
+                                    value={assistantData.gemini_key || ""}
+                                    onChange={(e) => setAssistantData(prev => ({ ...prev, gemini_key: e.target.value }))}
+                                    placeholder="AIzaSy..."
+                                    className="block w-full rounded-lg border-gray-300 pr-10 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowKey(!showKey)}
+                                        className="text-gray-400 hover:text-gray-500 focus:outline-none"
+                                    >
+                                        {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                            <p className="mt-1 text-xs text-gray-500">
+                                Insira sua chave da API do Google Gemini. Se deixar em branco, o sistema tentará usar a chave global da plataforma.
+                            </p>
+                        </div>
                     </div>
 
                     {/* Identidade do Agente */}

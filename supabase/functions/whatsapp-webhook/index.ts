@@ -1,15 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-// Configuração de CORS
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Interface para tipar a configuração vinda do banco
 interface AssistantConfig {
   active: boolean;
+  gemini_key?: string;
   identity: { name: string; tone: string; description: string };
   behavior: { ask_if_new_client: boolean; persuasive_mode: boolean };
   messages: any;
@@ -17,41 +16,34 @@ interface AssistantConfig {
 }
 
 serve(async (req) => {
-  // 1. Tratamento de CORS
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
     const payload = await req.json();
     
-    // 2. Validação básica do Payload da Evolution API (v1 ou v2)
-    // Ajuste conforme a versão da sua Evolution API. Este exemplo foca no evento messages.upsert
+    // Validação básica do Payload Evolution API
     const data = payload.data || payload;
-    const messageType = data.messageType || data.type;
     
-    // Ignorar mensagens enviadas por mim mesmo (fromMe) ou mensagens de status
+    // Ignorar mensagens próprias ou status
     if (data.key?.fromMe || !data.message) {
       return new Response(JSON.stringify({ status: 'ignored' }), { headers: corsHeaders });
     }
 
-    // Extrair dados cruciais
     const senderPhone = data.key.remoteJid; // Ex: 5511999999999@s.whatsapp.net
     const incomingText = data.message.conversation || data.message.extendedTextMessage?.text;
-    const instanceName = payload.instance || data.instance; // Nome da instância para identificar o negócio
+    const instanceName = payload.instance || data.instance;
 
     if (!incomingText) {
       return new Response(JSON.stringify({ status: 'no_text' }), { headers: corsHeaders });
     }
 
-    console.log(`📩 Mensagem recebida de ${senderPhone} na instância ${instanceName}: ${incomingText}`);
-
-    // 3. Inicializar Supabase Admin
+    // Inicializar Supabase Admin
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // 4. Identificar o Negócio e carregar configurações
-    // Buscamos o negócio que tenha essa instância configurada no JSONB evolution_api_config
+    // 1. Identificar Negócio
     const { data: businesses, error: bError } = await supabaseAdmin
       .from('businesses')
       .select('id, name, description, slug, assistant_config, evolution_api_config, services(name, price)')
@@ -59,7 +51,6 @@ serve(async (req) => {
       .limit(1);
 
     if (bError || !businesses || businesses.length === 0) {
-      console.error('Negócio não encontrado para a instância:', instanceName);
       return new Response(JSON.stringify({ error: 'Business not found' }), { status: 404 });
     }
 
@@ -67,13 +58,35 @@ serve(async (req) => {
     const config = business.assistant_config as AssistantConfig;
     const apiConfig = business.evolution_api_config;
 
-    // Verificar se o agente está ativo
     if (!config?.active) {
-      console.log('Agente desativado para este negócio.');
       return new Response(JSON.stringify({ status: 'agent_disabled' }));
     }
 
-    // 5. Construção do Prompt do Sistema (A "Alma" do Agente)
+    // 2. Salvar mensagem do usuário no histórico
+    await supabaseAdmin.from('chat_history').insert({
+      business_id: business.id,
+      contact_phone: senderPhone,
+      role: 'user',
+      content: incomingText
+    });
+
+    // 3. Buscar histórico recente (Memória)
+    // Pegamos as últimas 10 mensagens para contexto
+    const { data: history } = await supabaseAdmin
+      .from('chat_history')
+      .select('role, content')
+      .eq('business_id', business.id)
+      .eq('contact_phone', senderPhone)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // Reverter para ordem cronológica (mais antigo -> mais novo)
+    const chatHistory = (history || []).reverse().map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }]
+    }));
+
+    // 4. Construir Prompt do Sistema
     const servicesList = business.services?.map((s: any) => `- ${s.name} (R$ ${s.price})`).join('\n');
     const bookingLink = `${Deno.env.get('NEXT_PUBLIC_APP_URL') || 'https://agendapro.com'}/#/book/${business.slug}`;
 
@@ -83,52 +96,53 @@ serve(async (req) => {
       SUA PERSONALIDADE:
       - Tom de voz: ${config.identity.tone}.
       - Descrição: ${config.identity.description}.
-      ${config.behavior.persuasive_mode ? '- MODO PERSUASIVO ATIVO: Use gatilhos mentais e foque nos benefícios.' : ''}
+      ${config.behavior.persuasive_mode ? '- MODO PERSUASIVO ATIVO.' : ''}
 
-      CONTEXTO DO NEGÓCIO:
-      - Nome: ${business.name}
-      - Descrição: ${business.description}
+      CONTEXTO:
       - Serviços:
       ${servicesList}
-
-      SEUS OBJETIVOS:
-      1. Responder dúvidas sobre serviços e horários.
-      2. Direcionar o cliente para agendar no link oficial: ${bookingLink}
-      3. ${config.behavior.ask_if_new_client ? 'Se for o início da conversa, pergunte gentilmente se é a primeira vez do cliente conosco.' : ''}
-
-      MENSAGENS PADRÃO (Use como base, mas adapte para o contexto):
-      - Boas-vindas (Novo): "${config.messages.welcome_new}"
-      - Boas-vindas (Recorrente): "${config.messages.welcome_existing}"
-      - Sem horários: "${config.messages.no_slots}"
+      - Link de agendamento: ${bookingLink}
 
       REGRAS:
-      - Responda de forma curta e natural (estilo WhatsApp).
-      - NUNCA invente horários que não sabe.
-      - Sempre envie o link ${bookingLink} quando o cliente quiser agendar.
+      - Responda de forma curta (WhatsApp style).
+      - SEMPRE envie o link ${bookingLink} para agendamentos.
+      - Use as mensagens padrão configuradas se apropriado.
     `;
 
-    // 6. Chamar a IA (Exemplo com Gemini via REST, pois é gratuito/barato e fácil)
-    // OBS: Você precisa configurar GEMINI_API_KEY nos Secrets do Supabase
-    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${Deno.env.get('GEMINI_API_KEY')}`, {
+    // 5. Determinar API Key (Negócio > Global)
+    const apiKey = config.gemini_key || Deno.env.get('GEMINI_API_KEY');
+    
+    if (!apiKey) {
+      console.error("Nenhuma chave Gemini configurada.");
+      return new Response(JSON.stringify({ error: 'No API Key' }), { status: 500 });
+    }
+
+    // 6. Chamar IA
+    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [
-          { role: "user", parts: [{ text: systemPrompt }] }, // Contexto (System Hack para Gemini)
-          { role: "model", parts: [{ text: "Entendido. Estou pronto para atuar como o assistente." }] },
-          { role: "user", parts: [{ text: incomingText }] } // Mensagem do cliente
+          { role: 'user', parts: [{ text: systemPrompt }] }, // System instruction hack for Gemini Rest API
+          ...chatHistory // Inclui a mensagem atual do usuário que já foi salva no passo 2
         ]
       })
     });
 
     const aiData = await aiResponse.json();
-    const replyText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, estou com uma instabilidade momentânea. Pode tentar novamente?";
+    const replyText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, não entendi. Pode repetir?";
 
-    // 7. Enviar resposta via Evolution API
+    // 7. Salvar resposta da IA no histórico
+    await supabaseAdmin.from('chat_history').insert({
+      business_id: business.id,
+      contact_phone: senderPhone,
+      role: 'model',
+      content: replyText
+    });
+
+    // 8. Enviar via Evolution API
     const normalizedUrl = apiConfig.serverUrl.replace(/\/$/, "");
     const sendEndpoint = `${normalizedUrl}/message/sendText/${apiConfig.instanceName}`;
-    
-    // Limpeza do número
     const cleanPhone = senderPhone.replace('@s.whatsapp.net', '');
 
     await fetch(sendEndpoint, {
@@ -140,17 +154,17 @@ serve(async (req) => {
       body: JSON.stringify({
         number: cleanPhone,
         text: replyText,
-        options: { delay: 2000, presence: "composing" }
+        options: { delay: 1500, presence: "composing" }
       })
     });
 
-    return new Response(JSON.stringify({ success: true, reply: replyText }), {
+    return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
 
   } catch (err: any) {
-    console.error("Erro no webhook:", err);
+    console.error("Function error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,

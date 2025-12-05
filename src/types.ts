@@ -104,6 +104,7 @@ export interface SocialMedia {
 // Configuração do Agente IA para WhatsApp
 export interface AssistantConfig {
   active: boolean; // Se o bot deve responder ou não
+  gemini_key?: string; // Chave da API (opcional, se não tiver usa a do sistema)
   identity: {
     name: string; // Nome do agente (ex: Luna)
     tone: string; // Tom de voz (ex: formal, descolado)
