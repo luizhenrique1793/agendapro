@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
 import { supabase } from "../../lib/supabase";
-import { Save, Loader2, MessageCircle, CheckCircle2, AlertCircle, Wifi, WifiOff, Send, Phone, RefreshCw, AlertTriangle, Bug, BellRing } from "lucide-react";
+import { Save, Loader2, MessageCircle, CheckCircle2, AlertCircle, Wifi, WifiOff, Send, Phone, RefreshCw, AlertTriangle, Bug, BellRing, Power } from "lucide-react";
 import { EvolutionApiConfig } from "../../types";
 
 const WhatsappSettings: React.FC = () => {
@@ -19,6 +19,7 @@ const WhatsappSettings: React.FC = () => {
   const [status, setStatus] = useState<"idle" | "testing" | "connected" | "disconnected" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [togglingReminders, setTogglingReminders] = useState(false); // Estado de carregamento para o botão de lembretes
   const [saveError, setSaveError] = useState<any>(null);
 
   // Test Message State
@@ -36,23 +37,48 @@ const WhatsappSettings: React.FC = () => {
             instanceName: currentBusiness.evolution_api_config.instanceName || ""
         });
       }
-      // Atualiza o campo de lembretes automáticos no banco de dados
+      // Atualiza o estado local com o valor vindo do banco de dados
       // Garante que usamos o valor do banco, ou false se undefined/null
       console.log("Current Business Loaded:", currentBusiness);
       setAutoReminders(currentBusiness.automatic_reminders === true);
     }
   }, [currentBusiness]);
 
+  // Função dedicada para alternar os lembretes automáticos com salvamento imediato
+  const handleToggleReminders = async () => {
+    if (!currentBusiness?.id) return;
+    
+    setTogglingReminders(true);
+    const newState = !autoReminders; // Inverte o estado atual
+
+    try {
+        console.log(`Atualizando lembretes automáticos para: ${newState}`);
+        
+        // Chama a função da store para atualizar APENAS este campo no banco de dados
+        await updateBusiness({ automatic_reminders: newState });
+        
+        // Atualiza o estado local para refletir a mudança
+        setAutoReminders(newState);
+        
+        // Feedback visual simples
+        // alert(newState ? "Lembretes ativados com sucesso!" : "Lembretes desativados.");
+    } catch (error: any) {
+        console.error("Erro ao alternar lembretes:", error);
+        alert("Erro ao salvar a configuração de lembretes. Tente novamente.");
+    } finally {
+        setTogglingReminders(false);
+    }
+  };
+
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsSaving(true);
     setSaveError(null);
 
-    console.log("Saving automatic_reminders:", autoReminders);
-    
-    // Atualiza o campo de lembretes automáticos no banco de dados
+    // Payload que será enviado para o updateBusiness (Supabase) para as configurações da API
     const payload = { 
         evolution_api_config: config,
+        // Também enviamos o estado atual dos lembretes para garantir consistência
         automatic_reminders: autoReminders
     };
 
@@ -63,7 +89,7 @@ const WhatsappSettings: React.FC = () => {
 
         // Chama a função da store que atualiza no banco
         await updateBusiness(payload);
-        alert("Configurações salvas com sucesso!");
+        alert("Configurações da API salvas com sucesso!");
     } catch (error: any) {
         console.error("ERRO AO SALVAR:", error);
         
@@ -247,26 +273,46 @@ const WhatsappSettings: React.FC = () => {
                     </div>
                 </div>
                 
-                {/* Toggle de Lembretes Automáticos */}
+                {/* Seção de Lembretes Automáticos com Botão de Ação Imediata */}
                 <div className="mt-6 border-t border-gray-100 pt-6">
-                    <div className="flex items-start gap-4 rounded-lg border border-indigo-100 bg-indigo-50 p-4">
-                        <BellRing className="mt-1 h-6 w-6 text-indigo-600" />
+                    <div className={`flex items-start gap-4 rounded-lg border p-4 transition-colors ${autoReminders ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                        <BellRing className={`mt-1 h-6 w-6 ${autoReminders ? 'text-green-600' : 'text-gray-400'}`} />
                         <div className="flex-1">
-                            <h3 className="text-base font-semibold text-indigo-900">Lembretes Automáticos</h3>
-                            <p className="mt-1 text-sm text-indigo-700">
+                            <div className="flex items-center gap-2">
+                                <h3 className={`text-base font-semibold ${autoReminders ? 'text-green-900' : 'text-gray-700'}`}>
+                                    Lembretes Automáticos
+                                </h3>
+                                {autoReminders && (
+                                    <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                                        Ativo
+                                    </span>
+                                )}
+                            </div>
+                            <p className={`mt-1 text-sm ${autoReminders ? 'text-green-700' : 'text-gray-500'}`}>
                                 Enviar mensagens automaticamente para os clientes 2 horas antes do agendamento.
                             </p>
                         </div>
-                        <label className="relative inline-flex cursor-pointer items-center">
-                            {/* Atualiza o campo de lembretes automáticos no banco de dados */}
-                            <input 
-                                type="checkbox" 
-                                className="peer sr-only" 
-                                checked={autoReminders}
-                                onChange={(e) => setAutoReminders(e.target.checked)}
-                            />
-                            <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300"></div>
-                        </label>
+                        
+                        {/* Botão de ação imediata que substitui o toggle switch */}
+                        <button
+                            type="button"
+                            onClick={handleToggleReminders}
+                            disabled={togglingReminders}
+                            className={`flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                                autoReminders 
+                                ? "bg-white text-red-600 border border-red-200 hover:bg-red-50 focus:ring-red-500"
+                                : "bg-primary-600 text-white hover:bg-primary-500 focus:ring-primary-500"
+                            } disabled:opacity-70`}
+                        >
+                            {togglingReminders ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : autoReminders ? (
+                                <Power className="mr-2 h-4 w-4" />
+                            ) : (
+                                <CheckCircle2 className="mr-2 h-4 w-4" />
+                            )}
+                            {togglingReminders ? "Salvando..." : (autoReminders ? "Desativar" : "Ativar Agora")}
+                        </button>
                     </div>
                 </div>
 
