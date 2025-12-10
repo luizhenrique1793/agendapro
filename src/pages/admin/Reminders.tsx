@@ -12,9 +12,11 @@ import {
   Filter,
   Download,
   Eye,
-  EyeOff
+  EyeOff,
+  Settings,
+  Save
 } from "lucide-react";
-import { Appointment } from "../../types";
+import { Appointment, ReminderConfig } from "../../types";
 
 interface ReminderInfo {
   appointment: Appointment;
@@ -24,14 +26,34 @@ interface ReminderInfo {
 }
 
 const Reminders: React.FC = () => {
-  const { appointments, currentBusiness, services } = useApp();
+  const { appointments, currentBusiness, services, updateBusiness } = useApp();
   const [reminders, setReminders] = useState<ReminderInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'sent' | 'failed'>('all');
   const [showDetails, setShowDetails] = useState<Record<string, boolean>>({});
+  
+  // Estado para configurações de lembretes
+  const [reminderConfig, setReminderConfig] = useState<ReminderConfig>({
+    same_day_enabled: true,
+    same_day_hours_before: 2,
+    previous_day_enabled: true,
+    early_threshold_hour: "09:00",
+    previous_day_time: "19:00"
+  });
+  const [savingConfig, setSavingConfig] = useState(false);
 
   useEffect(() => {
     if (currentBusiness) {
+      // Carregar configurações existentes
+      if (currentBusiness.reminder_config) {
+        setReminderConfig({
+          same_day_enabled: currentBusiness.reminder_config.same_day_enabled ?? true,
+          same_day_hours_before: currentBusiness.reminder_config.same_day_hours_before ?? 2,
+          previous_day_enabled: currentBusiness.reminder_config.previous_day_enabled ?? true,
+          early_threshold_hour: currentBusiness.reminder_config.early_threshold_hour ?? "09:00",
+          previous_day_time: currentBusiness.reminder_config.previous_day_time ?? "19:00"
+        });
+      }
       loadReminders();
     }
   }, [currentBusiness, appointments]);
@@ -43,8 +65,7 @@ const Reminders: React.FC = () => {
     const processedReminders: ReminderInfo[] = appointments
       .filter(appt => appt.status !== 'Cancelado' && appt.status !== 'Concluído')
       .map(appt => {
-        const apptDate = new Date(`${appt.date}T${appt.time}:00`);
-        const reminderTime = new Date(apptDate.getTime() - 2 * 60 * 60 * 1000); // 2 horas antes
+        const sendAt = calculateReminderSendTime(appt);
         
         let status: 'pending' | 'sent' | 'failed' = 'pending';
         if (appt.reminder_sent) {
@@ -53,8 +74,8 @@ const Reminders: React.FC = () => {
         
         return {
           appointment: appt,
-          willBeSentAt: reminderTime,
-          sentAt: appt.reminder_sent ? new Date() : undefined, // Removido pois não temos data real
+          willBeSentAt: sendAt,
+          sentAt: appt.reminder_sent ? new Date() : undefined,
           status
         };
       })
@@ -62,6 +83,51 @@ const Reminders: React.FC = () => {
 
     setReminders(processedReminders);
     setLoading(false);
+  };
+
+  // Função para calcular quando o lembrete deve ser enviado
+  const calculateReminderSendTime = (appointment: Appointment): Date => {
+    const apptDateTime = new Date(`${appointment.date}T${appointment.time}:00`);
+    const apptHour = appointment.time.substring(0, 5); // HH:MM
+    
+    // Se lembretes no mesmo dia estão desabilitados, não calcular
+    if (!reminderConfig.same_day_enabled) {
+      return new Date(apptDateTime.getTime() - 24 * 60 * 60 * 1000); // Placeholder
+    }
+    
+    // Verificar se o horário é considerado "muito cedo"
+    const isEarlyAppointment = apptHour < reminderConfig.early_threshold_hour;
+    
+    if (isEarlyAppointment && reminderConfig.previous_day_enabled) {
+      // Enviar no dia anterior no horário configurado
+      const previousDay = new Date(apptDateTime);
+      previousDay.setDate(previousDay.getDate() - 1);
+      
+      const [hours, minutes] = reminderConfig.previous_day_time.split(':');
+      previousDay.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      
+      return previousDay;
+    } else {
+      // Enviar no mesmo dia, X horas antes
+      return new Date(apptDateTime.getTime() - reminderConfig.same_day_hours_before * 60 * 60 * 1000);
+    }
+  };
+
+  const handleSaveReminderConfig = async () => {
+    if (!currentBusiness?.id) return;
+    
+    setSavingConfig(true);
+    try {
+      await updateBusiness({ reminder_config: reminderConfig });
+      alert("Configurações de lembretes salvas com sucesso!");
+      // Recarregar lembretes com nova configuração
+      loadReminders();
+    } catch (error) {
+      console.error("Erro ao salvar configurações:", error);
+      alert("Erro ao salvar configurações de lembretes.");
+    } finally {
+      setSavingConfig(false);
+    }
   };
 
   const filteredReminders = reminders.filter(reminder => {
@@ -201,6 +267,109 @@ const Reminders: React.FC = () => {
           <p className="text-gray-500">
             Gerencie e visualize quando os lembretes serão enviados
           </p>
+        </div>
+
+        {/* Card de Configurações de Lembretes */}
+        <div className="mb-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <Settings className="h-6 w-6 text-gray-600" />
+            <h2 className="text-xl font-bold text-gray-900">Configurações de Lembretes</h2>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {/* Toggle: Lembretes no mesmo dia */}
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="same_day_enabled"
+                checked={reminderConfig.same_day_enabled}
+                onChange={(e) => setReminderConfig(prev => ({ ...prev, same_day_enabled: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <label htmlFor="same_day_enabled" className="text-sm font-medium text-gray-700">
+                Lembretes no mesmo dia
+              </label>
+            </div>
+
+            {/* Horas antes no mesmo dia */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Horas antes no mesmo dia
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="24"
+                value={reminderConfig.same_day_hours_before}
+                onChange={(e) => setReminderConfig(prev => ({ ...prev, same_day_hours_before: parseInt(e.target.value) || 2 }))}
+                className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                disabled={!reminderConfig.same_day_enabled}
+              />
+            </div>
+
+            {/* Toggle: Ajuste para dia anterior */}
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="previous_day_enabled"
+                checked={reminderConfig.previous_day_enabled}
+                onChange={(e) => setReminderConfig(prev => ({ ...prev, previous_day_enabled: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <label htmlFor="previous_day_enabled" className="text-sm font-medium text-gray-700">
+                Ajuste para dia anterior
+              </label>
+            </div>
+
+            {/* Horário limite "muito cedo" */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Horário limite "muito cedo"
+              </label>
+              <input
+                type="time"
+                value={reminderConfig.early_threshold_hour}
+                onChange={(e) => setReminderConfig(prev => ({ ...prev, early_threshold_hour: e.target.value }))}
+                className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                disabled={!reminderConfig.previous_day_enabled}
+              />
+            </div>
+
+            {/* Horário para enviar no dia anterior */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Horário no dia anterior
+              </label>
+              <input
+                type="time"
+                value={reminderConfig.previous_day_time}
+                onChange={(e) => setReminderConfig(prev => ({ ...prev, previous_day_time: e.target.value }))}
+                className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                disabled={!reminderConfig.previous_day_enabled}
+              />
+            </div>
+
+            {/* Botão Salvar */}
+            <div className="flex items-end">
+              <button
+                onClick={handleSaveReminderConfig}
+                disabled={savingConfig}
+                className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 disabled:opacity-70"
+              >
+                {savingConfig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Salvar Configurações
+              </button>
+            </div>
+          </div>
+
+          {/* Explicação da lógica */}
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <h3 className="text-sm font-semibold text-blue-900 mb-2">Como funciona:</h3>
+            <ul className="text-sm text-blue-800 space-y-1">
+              <li>• <strong>Mesmo dia:</strong> Se o horário ≥ {reminderConfig.early_threshold_hour}, envia {reminderConfig.same_day_hours_before}h antes</li>
+              <li>• <strong>Dia anterior:</strong> Se o horário &lt; {reminderConfig.early_threshold_hour}, envia no dia anterior às {reminderConfig.previous_day_time}</li>
+            </ul>
+          </div>
         </div>
 
         {/* Filtros */}
@@ -378,7 +547,7 @@ const Reminders: React.FC = () => {
                       >
                         {showDetails[reminder.appointment.id] ? 
                           <EyeOff className="h-5 w-5" /> : 
-                          <Eye className="h-5 w-5" />
+                          <Eye className "h-5 w-5" />
                         }
                       </button>
                       
