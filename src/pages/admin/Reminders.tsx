@@ -113,6 +113,9 @@ const Reminders: React.FC = () => {
   };
 
   const formatDateTime = (date: Date) => {
+    if (!date || isNaN(date.getTime())) {
+      return "Data inválida";
+    }
     return date.toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
@@ -120,6 +123,22 @@ const Reminders: React.FC = () => {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const formatAppointmentDate = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr + 'T00:00:00');
+      if (isNaN(date.getTime())) {
+        return dateStr; // Retorna a string original se não conseguir parsear
+      }
+      return date.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+    } catch (error) {
+      return dateStr;
+    }
   };
 
   const getServiceName = (serviceId: string) => {
@@ -344,7 +363,7 @@ const Reminders: React.FC = () => {
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center p-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary-600" />
               <span className="ml-3 text-gray-600">Carregando lembretes...</span>
             </div>
           ) : filteredReminders.length === 0 ? (
@@ -384,7 +403,7 @@ const Reminders: React.FC = () => {
                         <div className="mt-2 grid grid-cols-2 gap-4 text-sm text-gray-600">
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" />
-                            <span>{new Date(reminder.appointment.date).toLocaleDateString('pt-BR')}</span>
+                            <span>{formatAppointmentDate(reminder.appointment.date)}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4" />
