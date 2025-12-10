@@ -24,7 +24,7 @@ interface ReminderInfo {
 }
 
 const Reminders: React.FC = () => {
-  const { appointments, currentBusiness } = useApp();
+  const { appointments, currentBusiness, services } = useApp();
   const [reminders, setReminders] = useState<ReminderInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'sent' | 'failed'>('all');
@@ -54,7 +54,7 @@ const Reminders: React.FC = () => {
         return {
           appointment: appt,
           willBeSentAt: reminderTime,
-          sentAt: appt.reminder_sent ? new Date() : undefined,
+          sentAt: appt.reminder_sent ? new Date() : undefined, // Removido pois não temos data real
           status
         };
       })
@@ -84,6 +84,11 @@ const Reminders: React.FC = () => {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const getServiceName = (serviceId: string) => {
+    const service = services.find(s => s.id === serviceId);
+    return service?.name || 'Não informado';
   };
 
   const getStatusIcon = (status: 'pending' | 'sent' | 'failed') => {
@@ -124,7 +129,7 @@ const Reminders: React.FC = () => {
       const config = business.evolution_api_config;
       const clientFirstName = appointment.client_name.split(' ')[0];
       const time = appointment.time.substring(0, 5);
-      const serviceName = appointment.services?.name || 'serviço';
+      const serviceName = getServiceName(appointment.service_id);
       const businessName = currentBusiness?.name || 'Barbearia';
       
       // Verificar se é para amanhã ou hoje
@@ -328,11 +333,15 @@ const Reminders: React.FC = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             <Bell className="h-4 w-4" />
-                            <span>Enviado às {formatDateTime(reminder.willBeSentAt)}</span>
+                            <span>
+                              {reminder.status === 'sent' 
+                                ? 'Lembrete enviado' 
+                                : `Será enviado às ${formatDateTime(reminder.willBeSentAt)}`}
+                            </span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="font-medium">Serviço:</span>
-                            <span>{reminder.appointment.services?.name || 'Não informado'}</span>
+                            <span>{getServiceName(reminder.appointment.service_id)}</span>
                           </div>
                         </div>
                         
@@ -346,7 +355,7 @@ const Reminders: React.FC = () => {
                               </div>
                               <div>
                                 <span className="text-gray-500">Profissional:</span>
-                                <p className="font-medium">{reminder.appointment.professionals?.name || 'Não atribuído'}</p>
+                                <p className="font-medium">{reminder.appointment.professional_id ? 'Atribuído' : 'Não atribuído'}</p>
                               </div>
                               <div>
                                 <span className="text-gray-500">Status:</span>
