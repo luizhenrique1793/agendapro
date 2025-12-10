@@ -1,3 +1,10 @@
+export enum AppointmentStatus {
+  PENDING = 'Pendente',
+  CONFIRMED = 'Confirmado',
+  COMPLETED = 'Concluído',
+  CANCELLED = 'Cancelado'
+}
+
 export interface ReminderConfig {
   same_day_enabled: boolean; // Se deve enviar lembretes no mesmo dia
   previous_day_time: string; // Horário para enviar no dia anterior (ex: "19:00")
