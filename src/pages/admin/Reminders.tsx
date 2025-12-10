@@ -25,11 +25,12 @@ interface ReminderInfo {
 }
 
 const Reminders: React.FC = () => {
-  const { appointments, currentBusiness, services } = useApp();
+  const { appointments, currentBusiness, services, sendDailyReminders } = useApp();
   const [reminders, setReminders] = useState<ReminderInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'sent' | 'failed'>('all');
   const [showDetails, setShowDetails] = useState<Record<string, boolean>>({});
+  const [sendingManual, setSendingManual] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentBusiness) {
@@ -55,8 +56,12 @@ const Reminders: React.FC = () => {
     const processedReminders: ReminderInfo[] = appointments
       .filter(appt => appt.status !== 'Cancelado' && appt.status !== 'Concluído')
       .map(appt => {
-        const apptDateTime = new Date(`${appt.date}T${appt.time}:00`);
-        const apptHour = parseInt(appt.time.split(':')[0]);
+        // Criar data do agendamento de forma mais robusta
+        const [year, month, day] = appt.date.split('-').map(Number);
+        const [hours, minutes] = appt.time.split(':').map(Number);
+        const apptDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
+        
+        const apptHour = hours;
         const earlyThreshold = parseInt(config.early_threshold_hour.split(':')[0]);
         
         let reminderTime: Date;
@@ -65,11 +70,10 @@ const Reminders: React.FC = () => {
         // Verificar se deve enviar no dia anterior
         if (config.previous_day_enabled && apptHour < earlyThreshold) {
           // Enviar no dia anterior no horário configurado
-          const previousDay = new Date(apptDateTime);
-          previousDay.setDate(previousDay.getDate() - 1);
+          const previousDay = new Date(year, month - 1, day - 1); // Dia anterior
           
-          const [hours, minutes] = config.previous_day_time.split(':').map(Number);
-          previousDay.setHours(hours, minutes, 0, 0);
+          const [reminderHours, reminderMinutes] = config.previous_day_time.split(':').map(Number);
+          previousDay.setHours(reminderHours, reminderMinutes, 0, 0);
           
           reminderTime = previousDay;
           isPreviousDay = true;
@@ -127,7 +131,8 @@ const Reminders: React.FC = () => {
 
   const formatAppointmentDate = (dateStr: string) => {
     try {
-      const date = new Date(dateStr + 'T00:00:00');
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
       if (isNaN(date.getTime())) {
         return dateStr; // Retorna a string original se não conseguir parsear
       }
@@ -169,19 +174,14 @@ const Reminders: React.FC = () => {
   };
 
   const sendManualReminder = async (appointment: Appointment) => {
+    if (!currentBusiness?.evolution_api_config) {
+      alert('WhatsApp não configurado para este negócio');
+      return;
+    }
+
+    setSendingManual(appointment.id);
     try {
-      const { data: business } = await useApp.getState().supabase
-        .from('businesses')
-        .select('evolution_api_config')
-        .eq('id', currentBusiness?.id)
-        .single();
-
-      if (!business?.evolution_api_config) {
-        alert('WhatsApp não configurado para este negócio');
-        return;
-      }
-
-      const config = business.evolution_api_config;
+      const config = currentBusiness.evolution_api_config;
       const clientFirstName = appointment.client_name.split(' ')[0];
       const time = appointment.time.substring(0, 5);
       const serviceName = getServiceName(appointment.service_id);
@@ -189,7 +189,6 @@ const Reminders: React.FC = () => {
       
       // Verificar se é para amanhã ou hoje baseado na configuração
       const reminderConfig = currentBusiness?.reminder_config;
-      const apptDate = new Date(appointment.date);
       const apptHour = parseInt(appointment.time.split(':')[0]);
       const earlyThreshold = parseInt((reminderConfig?.early_threshold_hour || "09:00").split(':')[0]);
       
@@ -220,13 +219,7 @@ const Reminders: React.FC = () => {
       });
 
       if (response.ok) {
-        // Atualizar status no banco
-        await useApp.getState().supabase
-          .from('appointments')
-          .update({ reminder_sent: true })
-          .eq('id', appointment.id);
-        
-        // Recarregar lista
+        // Recarregar lista para atualizar status
         loadReminders();
         alert('Lembrete enviado com sucesso!');
       } else {
@@ -235,6 +228,8 @@ const Reminders: React.FC = () => {
     } catch (error) {
       console.error(error);
       alert('Erro ao enviar lembrete');
+    } finally {
+      setSendingManual(null);
     }
   };
 
@@ -301,9 +296,12 @@ const Reminders: React.FC = () => {
               </div>
             </div>
             
-            <button className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500">
-              <Download className="h-4 w-4" />
-              Exportar
+            <button 
+              onClick={() => sendDailyReminders()}
+              className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500"
+            >
+              <Send className="h-4 w-4" />
+              Enviar Lembretes Hoje
             </button>
           </div>
         </div>
@@ -463,9 +461,14 @@ const Reminders: React.FC = () => {
                       {reminder.status === 'pending' && (
                         <button
                           onClick={() => sendManualReminder(reminder.appointment)}
-                          className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500"
+                          disabled={sendingManual === reminder.appointment.id}
+                          className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 disabled:opacity-70"
                         >
-                          <Send className="h-4 w-4" />
+                          {sendingManual === reminder.appointment.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
                           Enviar Agora
                         </button>
                       )}
