@@ -26,12 +26,7 @@ serve(async (req) => {
         time,
         status,
         date,
-        businesses (
-          id,
-          name,
-          evolution_api_config,
-          reminder_config
-        ),
+        businesses (name, evolution_api_config),
         services (name),
         professionals (name)
       `)
@@ -45,60 +40,42 @@ serve(async (req) => {
     const results = [];
 
     for (const appt of appointments || []) {
-      const business = appt.businesses;
+      const config = appt.businesses?.evolution_api_config;
       
-      if (!business?.evolution_api_config?.serverUrl || 
-          !business.evolution_api_config.apiKey || 
-          !business.evolution_api_config.instanceName || 
-          !appt.client_phone) {
+      if (!config || !config.serverUrl || !config.apiKey || !config.instanceName || !appt.client_phone) {
         results.push({ id: appt.id, status: 'skipped', reason: 'no_config_or_phone' });
         continue;
       }
 
-      // Obter configuração de lembretes do negócio (com valores padrão)
-      const reminderConfig = business.reminder_config || {
-        same_day_enabled: true,
-        same_day_hours_before: 2,
-        previous_day_enabled: true,
-        early_threshold_hour: "09:00",
-        previous_day_time: "19:00"
-      };
-
-      // Preparar mensagem baseada na configuração
-      const clientFirstName = appt.client_name.split(' ')[0];
-      const time = appt.time.substring(0, 5);
-      const serviceName = appt.services?.name || 'serviço';
-      const businessName = business.name;
-      const proName = appt.professionals?.name ? ` com ${appt.professionals.name}` : '';
-      
-      // Verificar se é para amanhã ou hoje baseado na configuração
+      // MELHORIA: Verificar se o agendamento é para o dia seguinte
       const apptDate = new Date(appt.date);
       const todayDate = new Date(today);
       const isTomorrow = apptDate > todayDate;
       
-      // Aplicar lógica de configuração: verificar se é horário "muito cedo"
-      const apptHour = appt.time.substring(0, 5);
-      const isEarlyAppointment = apptHour < reminderConfig.early_threshold_hour;
-      const willSendTomorrow = isEarlyAppointment && reminderConfig.previous_day_enabled;
-      
       let timeDescription;
-      if (isTomorrow || willSendTomorrow) {
+      if (isTomorrow) {
         timeDescription = 'amanhã';
       } else {
         timeDescription = 'hoje';
       }
       
+      const clientFirstName = appt.client_name.split(' ')[0];
+      const time = appt.time.substring(0, 5);
+      const serviceName = appt.services?.name || 'serviço';
+      const businessName = appt.businesses?.name || 'Barbearia';
+      const proName = appt.professionals?.name ? ` com ${appt.professionals.name}` : '';
+      
       const message = `Olá ${clientFirstName}! ☀️\n\nPassando para lembrar do seu horário ${timeDescription} às *${time}* na *${businessName}* para *${serviceName}*${proName}.\n\nEstamos te esperando! 😉`;
 
       try {
-        const normalizedUrl = business.evolution_api_config.serverUrl.replace(/\/$/, "");
-        const endpoint = `${normalizedUrl}/message/sendText/${business.evolution_api_config.instanceName}`;
+        const normalizedUrl = config.serverUrl.replace(/\/$/, "");
+        const endpoint = `${normalizedUrl}/message/sendText/${config.instanceName}`;
         const cleanPhone = appt.client_phone.replace(/\D/g, "");
 
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 
-                'apikey': business.evolution_api_config.apiKey, 
+                'apikey': config.apiKey, 
                 'Content-Type': 'application/json' 
             },
             body: JSON.stringify({
