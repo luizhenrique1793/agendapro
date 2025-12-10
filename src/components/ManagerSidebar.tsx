@@ -8,8 +8,7 @@ import {
   Scissors,
   Store,
   Users,
-  MessageCircle,
-  Bell
+  MessageCircle
 } from "lucide-react";
 import { useApp } from "../store";
 import { useAuth } from "../context/AuthContext";
@@ -28,7 +27,6 @@ export const ManagerSidebar: React.FC = () => {
     { path: "/manager/clients", label: "Clientes", icon: Users },
     { path: "/manager/professionals", label: "Profissionais", icon: Users },
     { path: "/manager/services", label: "Serviços", icon: Scissors },
-    { path: "/manager/reminders", label: "Lembretes", icon: Bell },
     { path: "/manager/whatsapp", label: "WhatsApp API", icon: MessageCircle },
     { path: "/manager/settings", label: "Configurações", icon: Settings },
   ];

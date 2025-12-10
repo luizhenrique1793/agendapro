@@ -17,7 +17,6 @@ import Settings from "./pages/admin/Settings";
 import WhatsappSettings from "./pages/admin/WhatsappSettings";
 import Clients from "./pages/admin/Clients";
 import Professionals from "./pages/admin/Professionals";
-import Reminders from "./pages/admin/Reminders"; // Nova página de lembretes
 import BusinessPage from "./pages/BusinessPage";
 import { AppProvider } from "./store";
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -146,14 +145,6 @@ const AppRoutes: React.FC = () => {
         element={
           <PrivateRoute>
             <Settings />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/manager/reminders"
-        element={
-          <PrivateRoute>
-            <Reminders />
           </PrivateRoute>
         }
       />
