@@ -21,18 +21,18 @@ serve(async (req) => {
       });
     }
 
-    // Normaliza a URL
+    // Normalize URL
     const normalizedUrl = serverUrl.replace(/\/$/, "");
     const endpoint = `${normalizedUrl}/message/sendText/${instanceName}`;
 
     console.log(`Sending message to ${to} via ${endpoint}`);
 
-    // Limpa o número (remove caracteres não numéricos)
+    // Clean the phone number (remove non-numeric characters)
     const cleanPhone = to.replace(/\D/g, "");
 
-    // Ajuste no payload conforme erro "instance requires property 'text'"
-    // Algumas versões da API esperam "text" na raiz, outras dentro de "textMessage".
-    // Vamos usar o formato simplificado que o erro sugere.
+    // Adjust payload based on "instance requires property 'text'" error
+    // Some versions of the API expect "text" at root, others inside "textMessage".
+    // We'll use the simplified format the error suggests.
     const payload = {
       number: cleanPhone,
       text: message,
@@ -56,7 +56,7 @@ serve(async (req) => {
       const errorText = await response.text();
       return new Response(JSON.stringify({ 
         success: false, 
-        error: `Erro na Evolution API (${response.status}): ${errorText}` 
+        error: `Evolution API Error (${response.status}): ${errorText}` 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200 
@@ -70,7 +70,7 @@ serve(async (req) => {
       status: 200,
     });
 
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ success: false, error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
