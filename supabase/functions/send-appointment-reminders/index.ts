@@ -26,7 +26,11 @@ serve(async (req) => {
         time,
         status,
         date,
-        businesses (name, evolution_api_config),
+        businesses (
+          name, 
+          evolution_api_config,
+          reminder_config
+        ),
         services (name),
         professionals (name)
       `)
@@ -41,19 +45,25 @@ serve(async (req) => {
 
     for (const appt of appointments || []) {
       const config = appt.businesses?.evolution_api_config;
+      const reminderConfig = appt.businesses?.reminder_config || {
+        same_day_enabled: true,
+        previous_day_time: "19:00",
+        early_threshold_hour: "09:00",
+        previous_day_enabled: true,
+        same_day_hours_before: 2
+      };
       
       if (!config || !config.serverUrl || !config.apiKey || !config.instanceName || !appt.client_phone) {
         results.push({ id: appt.id, status: 'skipped', reason: 'no_config_or_phone' });
         continue;
       }
 
-      // MELHORIA: Verificar se o agendamento é para o dia seguinte
-      const apptDate = new Date(appt.date);
-      const todayDate = new Date(today);
-      const isTomorrow = apptDate > todayDate;
+      // MELHORIA: Usar configuração personalizada para determinar se é "amanhã" ou "hoje"
+      const apptHour = parseInt(appt.time.split(':')[0]);
+      const earlyThreshold = parseInt(reminderConfig.early_threshold_hour.split(':')[0]);
       
       let timeDescription;
-      if (isTomorrow) {
+      if (reminderConfig.previous_day_enabled && apptHour < earlyThreshold) {
         timeDescription = 'amanhã';
       } else {
         timeDescription = 'hoje';

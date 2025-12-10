@@ -14,13 +14,14 @@ import {
   Eye,
   EyeOff
 } from "lucide-react";
-import { Appointment } from "../../types";
+import { Appointment, ReminderConfig } from "../../types";
 
 interface ReminderInfo {
   appointment: Appointment;
   willBeSentAt: Date;
   sentAt?: Date;
   status: 'pending' | 'sent' | 'failed';
+  isPreviousDay: boolean; // Se será enviado no dia anterior
 }
 
 const Reminders: React.FC = () => {
@@ -39,12 +40,46 @@ const Reminders: React.FC = () => {
   const loadReminders = () => {
     setLoading(true);
     
+    // Configuração padrão se não existir
+    const defaultConfig: ReminderConfig = {
+      same_day_enabled: true,
+      previous_day_time: "19:00",
+      early_threshold_hour: "09:00",
+      previous_day_enabled: true,
+      same_day_hours_before: 2
+    };
+    
+    const config = currentBusiness?.reminder_config || defaultConfig;
+    
     // Processar agendamentos para calcular quando os lembretes serão enviados
     const processedReminders: ReminderInfo[] = appointments
       .filter(appt => appt.status !== 'Cancelado' && appt.status !== 'Concluído')
       .map(appt => {
-        const apptDate = new Date(`${appt.date}T${appt.time}:00`);
-        const reminderTime = new Date(apptDate.getTime() - 2 * 60 * 60 * 1000); // 2 horas antes
+        const apptDateTime = new Date(`${appt.date}T${appt.time}:00`);
+        const apptHour = parseInt(appt.time.split(':')[0]);
+        const earlyThreshold = parseInt(config.early_threshold_hour.split(':')[0]);
+        
+        let reminderTime: Date;
+        let isPreviousDay = false;
+        
+        // Verificar se deve enviar no dia anterior
+        if (config.previous_day_enabled && apptHour < earlyThreshold) {
+          // Enviar no dia anterior no horário configurado
+          const previousDay = new Date(apptDateTime);
+          previousDay.setDate(previousDay.getDate() - 1);
+          
+          const [hours, minutes] = config.previous_day_time.split(':').map(Number);
+          previousDay.setHours(hours, minutes, 0, 0);
+          
+          reminderTime = previousDay;
+          isPreviousDay = true;
+        } else if (config.same_day_enabled) {
+          // Enviar no mesmo dia, X horas antes
+          reminderTime = new Date(apptDateTime.getTime() - config.same_day_hours_before * 60 * 60 * 1000);
+        } else {
+          // Fallback: 2 horas antes
+          reminderTime = new Date(apptDateTime.getTime() - 2 * 60 * 60 * 1000);
+        }
         
         let status: 'pending' | 'sent' | 'failed' = 'pending';
         if (appt.reminder_sent) {
@@ -54,8 +89,9 @@ const Reminders: React.FC = () => {
         return {
           appointment: appt,
           willBeSentAt: reminderTime,
-          sentAt: appt.reminder_sent ? new Date() : undefined, // Removido pois não temos data real
-          status
+          sentAt: appt.reminder_sent ? new Date() : undefined,
+          status,
+          isPreviousDay
         };
       })
       .sort((a, b) => a.willBeSentAt.getTime() - b.willBeSentAt.getTime());
@@ -132,13 +168,14 @@ const Reminders: React.FC = () => {
       const serviceName = getServiceName(appointment.service_id);
       const businessName = currentBusiness?.name || 'Barbearia';
       
-      // Verificar se é para amanhã ou hoje
+      // Verificar se é para amanhã ou hoje baseado na configuração
+      const reminderConfig = currentBusiness?.reminder_config;
       const apptDate = new Date(appointment.date);
-      const todayDate = new Date();
-      const isTomorrow = apptDate > todayDate;
+      const apptHour = parseInt(appointment.time.split(':')[0]);
+      const earlyThreshold = parseInt((reminderConfig?.early_threshold_hour || "09:00").split(':')[0]);
       
       let timeDescription;
-      if (isTomorrow) {
+      if (reminderConfig?.previous_day_enabled && apptHour < earlyThreshold) {
         timeDescription = 'amanhã';
       } else {
         timeDescription = 'hoje';
@@ -201,6 +238,23 @@ const Reminders: React.FC = () => {
           <p className="text-gray-500">
             Gerencie e visualize quando os lembretes serão enviados
           </p>
+        </div>
+
+        {/* Configuração Atual */}
+        <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <h3 className="text-sm font-medium text-blue-900 mb-2">Configuração Atual de Lembretes</h3>
+          <div className="text-sm text-blue-800">
+            <p>
+              <strong>Mesmo dia:</strong> {currentBusiness?.reminder_config?.same_day_enabled ? 
+                `${currentBusiness.reminder_config.same_day_hours_before} horas antes` : 
+                'Desativado'}
+            </p>
+            <p>
+              <strong>Dia anterior:</strong> {currentBusiness?.reminder_config?.previous_day_enabled ? 
+                `Para agendamentos antes das ${currentBusiness.reminder_config.early_threshold_hour}, enviar às ${currentBusiness.reminder_config.previous_day_time}` : 
+                'Desativado'}
+            </p>
+          </div>
         </div>
 
         {/* Filtros */}
@@ -276,12 +330,12 @@ const Reminders: React.FC = () => {
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500">Falhas</p>
-                <p className="mt-1 text-2xl font-bold text-red-600">
-                  {reminders.filter(r => r.status === 'failed').length}
+                <p className="text-sm font-medium text-gray-500">Dia Anterior</p>
+                <p className="mt-1 text-2xl font-bold text-blue-600">
+                  {reminders.filter(r => r.isPreviousDay).length}
                 </p>
               </div>
-              <AlertCircle className="h-8 w-8 text-red-400" />
+              <Calendar className="h-8 w-8 text-blue-400" />
             </div>
           </div>
         </div>
@@ -320,6 +374,11 @@ const Reminders: React.FC = () => {
                           }`}>
                             {getStatusText(reminder.status)}
                           </span>
+                          {reminder.isPreviousDay && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              Dia Anterior
+                            </span>
+                          )}
                         </div>
                         
                         <div className="mt-2 grid grid-cols-2 gap-4 text-sm text-gray-600">
@@ -362,8 +421,8 @@ const Reminders: React.FC = () => {
                                 <p className="font-medium">{reminder.appointment.status}</p>
                               </div>
                               <div>
-                                <span className="text-gray-500">Criado em:</span>
-                                <p className="font-medium">{new Date(reminder.appointment.created_at).toLocaleString('pt-BR')}</p>
+                                <span className="text-gray-500">Tipo de Lembrete:</span>
+                                <p className="font-medium">{reminder.isPreviousDay ? 'Dia Anterior' : 'Mesmo Dia'}</p>
                               </div>
                             </div>
                           </div>
