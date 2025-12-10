@@ -1,9 +1,3 @@
-<button
-                        onClick={() => toggleReminderDetails(reminder.appointment.id)}
-                        className="p-2 text-gray-400 hover:text-gray-600"
-                      >
-                        {showDetails[reminder.appointment.id] ? 
-                          <EyeOff className="h-5 w-5" /> : 
-                          <Eye className="h-5 w-5" />
-                        }
-                      </button>
+## Adding export statement  
+- Found a task to modify the Reminders component by adding an export default statement.[REDACTED]</think><dyad-command type="refresh"></dyad-command><dyad-write path="src/pages/admin/Reminders.tsx" description="Adicionando export default ao componente Reminders">
+export default Reminders;
