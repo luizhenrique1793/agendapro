@@ -16,16 +16,21 @@ interface AssistantConfig {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight request
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  // MÓDULO DE IA DESATIVADO TEMPORARIAMENTE
+  // Motivo: reduzir consumo de créditos durante período de testes
+  // Para reativar: remover o return abaixo
+  return new Response(JSON.stringify({ status: "disabled_temporarily", message: "IA desativada temporariamente" }), { 
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    status: 200 
+  });
 
   try {
     const payload = await req.json();
     const data = payload.data || payload;
     
-    // Ignore status or own messages
+    // Ignorar status ou mensagens próprias
     if (data.key?.fromMe || !data.message) {
       return new Response(JSON.stringify({ status: 'ignored' }), { headers: corsHeaders });
     }
@@ -38,17 +43,13 @@ serve(async (req) => {
       return new Response(JSON.stringify({ status: 'no_text' }), { headers: corsHeaders });
     }
 
-    // Initialize Supabase Admin client with environment variables
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Missing Supabase environment variables');
-    }
+    // Inicializar Supabase Admin
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-    // 1. Identify Business
+    // 1. Identificar Negócio
     const { data: businesses, error: bError } = await supabaseAdmin
       .from('businesses')
       .select('id, name, description, slug, assistant_config, evolution_api_config, services(name, price)')
@@ -56,7 +57,7 @@ serve(async (req) => {
       .limit(1);
 
     if (bError || !businesses || businesses.length === 0) {
-      console.error("Business not found for instance:", instanceName);
+      console.error("Negócio não encontrado para instância:", instanceName);
       return new Response(JSON.stringify({ error: 'Business not found' }), { status: 404 });
     }
 
@@ -68,7 +69,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ status: 'agent_disabled' }));
     }
 
-    // 2. Save user message to history
+    // 2. Salvar mensagem do usuário no histórico
     await supabaseAdmin.from('chat_history').insert({
       business_id: business.id,
       contact_phone: senderPhone,
@@ -76,7 +77,7 @@ serve(async (req) => {
       content: incomingText
     });
 
-    // 3. Fetch history for context (last 10)
+    // 3. Buscar histórico para contexto (últimas 10)
     const { data: history } = await supabaseAdmin
       .from('chat_history')
       .select('role, content')
@@ -85,14 +86,14 @@ serve(async (req) => {
       .order('created_at', { ascending: false })
       .limit(10);
 
-    // Convert to Gemini format
+    // Converter para formato Gemini
     const rawHistory = (history || []).reverse().map(msg => ({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.content }]
     }));
 
-    // SANITIZATION: Gemini rejects messages with the same role consecutively (e.g., user, user).
-    // We'll group consecutive messages from the same author.
+    // SANITIZAÇÃO: O Gemini rejeita mensagens com o mesmo role consecutivas (ex: user, user).
+    // Vamos agrupar mensagens consecutivas do mesmo autor.
     const chatHistory: any[] = [];
     if (rawHistory.length > 0) {
         let currentMsg = rawHistory[0];
@@ -100,10 +101,10 @@ serve(async (req) => {
         for (let i = 1; i < rawHistory.length; i++) {
             const nextMsg = rawHistory[i];
             if (nextMsg.role === currentMsg.role) {
-                // Same role: concatenate the text
+                // Mesma role: concatena o texto
                 currentMsg.parts[0].text += "\n" + nextMsg.parts[0].text;
             } else {
-                // Different role: push the previous and start new
+                // Role diferente: empurra a anterior e inicia nova
                 chatHistory.push(currentMsg);
                 currentMsg = nextMsg;
             }
@@ -111,43 +112,43 @@ serve(async (req) => {
         chatHistory.push(currentMsg);
     }
 
-    // If by chance the last message is not from user (e.g., previous error), AI should not respond model->model
-    // But in our flow, we just saved the user msg, so the last should be user.
+    // Se por acaso a última mensagem não for do usuário (ex: erro anterior), a IA não deve responder modelo->modelo
+    // Mas no nosso fluxo, acabamos de salvar a msg do user, então a última deve ser user.
 
-    // 4. System Prompt
+    // 4. Prompt do Sistema
     const servicesList = business.services?.map((s: any) => `- ${s.name} (R$ ${s.price})`).join('\n');
     const bookingLink = `${Deno.env.get('NEXT_PUBLIC_APP_URL') || 'https://agendapro.com'}/#/book/${business.slug}`;
 
     const systemPrompt = `
-      ACT AS: ${config.identity.name}, virtual assistant of ${business.name}.
+      ATUE COMO: ${config.identity.name}, assistente virtual da ${business.name}.
       
-      YOUR PERSONALITY:
-      - Tone of voice: ${config.identity.tone}.
-      - Description: ${config.identity.description}.
-      ${config.behavior.persuasive_mode ? '- PERSUASIVE MODE ACTIVE.' : ''}
+      SUA PERSONALIDADE:
+      - Tom de voz: ${config.identity.tone}.
+      - Descrição: ${config.identity.description}.
+      ${config.behavior.persuasive_mode ? '- MODO PERSUASIVO ATIVO.' : ''}
 
-      CONTEXT:
-      - Services:
+      CONTEXTO:
+      - Serviços:
       ${servicesList}
-      - Booking link: ${bookingLink}
+      - Link de agendamento: ${bookingLink}
 
-      IMPORTANT RULES:
-      - Respond in a short and direct way (WhatsApp style).
-      - NEVER invent time slots. If asked about availability, send the link.
-      - Use the default messages configured if it makes sense.
-      - Link to book: ${bookingLink}
+      REGRAS IMPORTANTES:
+      - Responda de forma curta e direta (estilo WhatsApp).
+      - NUNCA invente horários. Se perguntarem disponibilidade, mande o link.
+      - Use as mensagens padrão configuradas se fizer sentido.
+      - Link para agendar: ${bookingLink}
     `;
 
-    // 5. Determine API Key
+    // 5. Determinar API Key
     const apiKey = config.gemini_key || Deno.env.get('GEMINI_API_KEY');
     
     if (!apiKey) {
-      console.error("No Gemini API Key configured.");
+      console.error("Sem API Key do Gemini configurada.");
       return new Response(JSON.stringify({ error: 'No API Key' }), { status: 500 });
     }
 
-    // 6. Call AI
-    // We use system_instruction to separate context from chat, avoiding role confusion
+    // 6. Chamar IA
+    // Usamos system_instruction para separar o contexto do chat, evitando confusão de roles
     const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -161,21 +162,21 @@ serve(async (req) => {
 
     const aiData = await aiResponse.json();
 
-    // Handle AI Error
+    // Tratamento de Erro da IA
     if (aiData.error) {
         console.error("Gemini API Error:", JSON.stringify(aiData.error));
-        // We don't respond to the user with the technical error, but log it for debugging
+        // Não respondemos ao usuário o erro técnico, mas logamos para debug
         return new Response(JSON.stringify({ error: aiData.error.message }), { status: 200 });
     }
 
     const replyText = aiData.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!replyText) {
-        console.error("Empty AI response:", JSON.stringify(aiData));
+        console.error("Resposta vazia da IA:", JSON.stringify(aiData));
         return new Response(JSON.stringify({ error: 'Empty AI response' }), { status: 200 });
     }
 
-    // 7. Save response
+    // 7. Salvar resposta
     await supabaseAdmin.from('chat_history').insert({
       business_id: business.id,
       contact_phone: senderPhone,
@@ -183,7 +184,7 @@ serve(async (req) => {
       content: replyText
     });
 
-    // 8. Send via Evolution API
+    // 8. Enviar via Evolution API
     if (apiConfig && apiConfig.serverUrl && apiConfig.apiKey) {
         const normalizedUrl = apiConfig.serverUrl.replace(/\/$/, "");
         const sendEndpoint = `${normalizedUrl}/message/sendText/${apiConfig.instanceName}`;

@@ -21,7 +21,7 @@ serve(async (req) => {
       });
     }
 
-    // Normalize URL (remove trailing slash if exists)
+    // Normaliza a URL (remove barra no final se existir)
     const normalizedUrl = serverUrl.replace(/\/$/, "");
     const endpoint = `${normalizedUrl}/instance/connectionState/${instanceName}`;
 
@@ -36,21 +36,21 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
-      // If API returns 404, instance doesn't exist. 
-      // If returns 403, key is wrong.
+      // Se a API retornar 404, a instância não existe. 
+      // Se retornar 403, a chave está errada.
       return new Response(JSON.stringify({ 
         success: false, 
-        error: `Evolution API Error: ${response.status} - ${response.statusText}` 
+        error: `Erro na Evolution API: ${response.status} - ${response.statusText}` 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 // Return 200 for frontend to handle business error
+        status: 200 // Retornamos 200 para o frontend tratar o erro de negócio
       });
     }
 
     const data = await response.json();
     
-    // The return format of Evolution v1 is usually { instance: {...}, state: "open" }
-    // We'll return the raw data for frontend to decide
+    // O formato de retorno da Evolution v1 geralmente é { instance: {...}, state: "open" }
+    // Vamos retornar o dado cru para o frontend decidir
     return new Response(JSON.stringify({ success: true, data }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
