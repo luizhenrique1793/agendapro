@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
-import { Clock, Calendar as CalendarIcon, X, Save, ChevronLeft, ChevronRight, CheckCircle, DollarSign, Send, Loader2, Filter } from "lucide-react";
-import { Appointment, AppointmentStatus } from "../../types";
+import { Clock, Calendar as CalendarIcon, X, Save, ChevronLeft, ChevronRight, CheckCircle, DollarSign, Send, Loader2, Filter, Settings } from "lucide-react";
+import { Appointment, AppointmentStatus, ReminderConfig } from "../../types";
 
 // Utility functions
 const toLocalDateString = (date: Date): string => {
@@ -31,6 +31,104 @@ const getServiceInfo = (serviceId: string, services: any[]) => {
 type ViewType = "day" | "week" | "month";
 
 // Sub-components
+const ReminderSettingsModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  currentBusiness: any;
+  updateBusiness: (updates: any) => Promise<void>;
+}> = ({ isOpen, onClose, currentBusiness, updateBusiness }) => {
+  if (!isOpen) return null;
+
+  const [config, setConfig] = useState<ReminderConfig>(currentBusiness?.reminder_config || {
+    same_day_enabled: true,
+    previous_day_enabled: true,
+    same_day_hours_before: 2,
+    previous_day_time: "19:00",
+    early_threshold_hour: "09:00",
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (currentBusiness?.reminder_config) {
+      setConfig(currentBusiness.reminder_config);
+    }
+  }, [currentBusiness]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateBusiness({ reminder_config: config });
+      alert("Configurações de lembrete salvas!");
+      onClose();
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao salvar configurações.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-gray-900">Configurar Lembretes Automáticos</h2>
+          <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
+        </div>
+        
+        <div className="space-y-6">
+          {/* Same Day Reminders */}
+          <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+            <div>
+              <h3 className="font-medium text-gray-900">Lembretes no Mesmo Dia</h3>
+              <p className="text-sm text-gray-500">Enviar lembretes algumas horas antes do agendamento.</p>
+            </div>
+            <input type="checkbox" checked={config.same_day_enabled} onChange={e => setConfig({...config, same_day_enabled: e.target.checked})} className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          </div>
+          {config.same_day_enabled && (
+            <div className="ml-6 p-4 bg-gray-50 rounded-lg">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Horas antes do agendamento</label>
+              <select value={config.same_day_hours_before} onChange={e => setConfig({...config, same_day_hours_before: parseInt(e.target.value)})} className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                <option value={1}>1 hora antes</option>
+                <option value={2}>2 horas antes</option>
+                <option value={3}>3 horas antes</option>
+                <option value={4}>4 horas antes</option>
+              </select>
+            </div>
+          )}
+          {/* Previous Day Reminders */}
+          <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+            <div>
+              <h3 className="font-medium text-gray-900">Lembretes no Dia Anterior</h3>
+              <p className="text-sm text-gray-500">Para agendamentos muito cedo, enviar na noite anterior.</p>
+            </div>
+            <input type="checkbox" checked={config.previous_day_enabled} onChange={e => setConfig({...config, previous_day_enabled: e.target.checked})} className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          </div>
+          {config.previous_day_enabled && (
+            <div className="ml-6 space-y-4 p-4 bg-gray-50 rounded-lg">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Horário limite para "muito cedo"</label>
+                <input type="time" value={config.early_threshold_hour} onChange={e => setConfig({...config, early_threshold_hour: e.target.value})} className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Horário de envio no dia anterior</label>
+                <input type="time" value={config.previous_day_time} onChange={e => setConfig({...config, previous_day_time: e.target.value})} className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500" />
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="mt-8 flex justify-end gap-3 pt-4 border-t border-gray-100">
+          <button onClick={onClose} className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">Cancelar</button>
+          <button onClick={handleSave} disabled={saving} className="flex items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-500 disabled:opacity-50">
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Salvar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ScheduleHeader: React.FC<{
   view: ViewType;
   setView: (view: ViewType) => void;
@@ -39,12 +137,12 @@ const ScheduleHeader: React.FC<{
   goToNext: () => void;
   handleSendReminders: () => void;
   sendingReminders: boolean;
-}> = ({ view, setView, currentDate, goToPrevious, goToNext, handleSendReminders, sendingReminders }) => (
+  onOpenReminderSettings: () => void;
+}> = ({ view, setView, currentDate, goToPrevious, goToNext, handleSendReminders, sendingReminders, onOpenReminderSettings }) => (
   <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
     <div className="flex items-center gap-4">
       <h1 className="text-2xl font-bold text-gray-900">Agenda</h1>
       
-      {/* View Toggles */}
       <div className="hidden sm:flex items-center rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
         <button onClick={() => setView('day')} className={`rounded px-3 py-1 text-sm font-medium ${view === 'day' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}>Dia</button>
         <button onClick={() => setView('week')} className={`rounded px-3 py-1 text-sm font-medium ${view === 'week' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}>Semana</button>
@@ -52,14 +150,14 @@ const ScheduleHeader: React.FC<{
       </div>
     </div>
     
-    <div className="flex gap-2">
+    <div className="flex items-center gap-2">
       <button
           onClick={handleSendReminders}
           disabled={sendingReminders}
           className="hidden sm:flex items-center rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 disabled:opacity-70"
       >
           {sendingReminders ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-          Enviar Lembretes Hoje
+          Lembretes de Hoje
       </button>
 
       <div className="flex items-center gap-2 rounded-lg bg-white p-1 shadow-sm border border-gray-200">
@@ -71,6 +169,13 @@ const ScheduleHeader: React.FC<{
           </div>
           <button onClick={goToNext} className="rounded p-1 hover:bg-gray-100"><ChevronRight className="h-5 w-5 text-gray-600" /></button>
       </div>
+      <button
+        onClick={onOpenReminderSettings}
+        className="p-2 rounded-lg bg-white border border-gray-200 text-gray-600 shadow-sm hover:bg-gray-50"
+        title="Configurar Lembretes"
+      >
+        <Settings className="h-5 w-5" />
+      </button>
     </div>
   </div>
 );
@@ -480,7 +585,7 @@ const AppointmentModal: React.FC<{
 
 // Main Schedule Component
 const Schedule: React.FC = () => {
-  const { appointments, services, professionals, rescheduleAppointment, updateAppointmentStatus, completeAppointment, sendDailyReminders } = useApp();
+  const { appointments, services, professionals, rescheduleAppointment, updateAppointmentStatus, completeAppointment, sendDailyReminders, currentBusiness, updateBusiness } = useApp();
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false);
@@ -489,6 +594,7 @@ const Schedule: React.FC = () => {
   
   // Reminder State
   const [sendingReminders, setSendingReminders] = useState(false);
+  const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
 
   // Form States
   const [newDate, setNewDate] = useState("");
@@ -498,9 +604,6 @@ const Schedule: React.FC = () => {
 
   // Filter States
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | 'all'>('all');
-
-  // UI State
-  const [copiedPhone, setCopiedPhone] = useState(false);
 
   useEffect(() => {
     if (selectedAppointment) {
@@ -585,6 +688,7 @@ const Schedule: React.FC = () => {
           goToNext={goToNext} 
           handleSendReminders={handleSendReminders} 
           sendingReminders={sendingReminders} 
+          onOpenReminderSettings={() => setIsReminderModalOpen(true)}
         />
         
         {/* Mobile Reminder Button */}
@@ -623,6 +727,12 @@ const Schedule: React.FC = () => {
           setNewTime={setNewTime}
           setPaymentMethod={setPaymentMethod}
           setPaymentAmount={setPaymentAmount}
+        />
+        <ReminderSettingsModal
+          isOpen={isReminderModalOpen}
+          onClose={() => setIsReminderModalOpen(false)}
+          currentBusiness={currentBusiness}
+          updateBusiness={updateBusiness}
         />
       </main>
     </div>

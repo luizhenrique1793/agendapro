@@ -23,18 +23,19 @@ export interface Business {
   phone?: string;
   secondary_phone?: string;
   address?: string; // Mantido para compatibilidade, mas o foco será address_details
-  address_details?: AddressDetails;
+  address_details?: any;
   description?: string;
   photos?: string[];
   payment_methods?: string[];
-  social_media?: SocialMedia;
+  social_media?: any;
   working_hours?: {
     day: string;
     intervals: { start: string; end: string }[];
     active: boolean;
   }[];
-  evolution_api_config?: EvolutionApiConfig;
+  evolution_api_config?: any;
   automatic_reminders?: boolean;
-  assistant_config?: AssistantConfig; // Nova configuração do Agente IA
+  assistant_config?: any; // Nova configuração do Agente IA
   reminder_config?: ReminderConfig; // Nova configuração de lembretes
+  timezone?: string;
 }
