@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ShieldCheck, Loader2, Lock } from "lucide-react";
@@ -27,14 +26,14 @@ const AdminLogin: React.FC = () => {
       if (signInError) throw signInError;
 
       if (user) {
-        // Check role
-        const { data: profile } = await supabase
-          .from('profiles')
+        // Check role in the correct 'users' table
+        const { data: userData } = await supabase
+          .from('users')
           .select('role')
           .eq('id', user.id)
           .single();
 
-        if (profile?.role === 'admin') {
+        if (userData?.role === 'admin') {
           navigate("/admin");
         } else {
           await supabase.auth.signOut();
