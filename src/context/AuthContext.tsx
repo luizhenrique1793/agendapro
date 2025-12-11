@@ -20,17 +20,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const fetchRole = async (userId: string) => {
         try {
-            const { data, error } = await supabase
+            // Tenta buscar da tabela 'users' primeiro
+            const { data: userData, error: userError } = await supabase
                 .from('users')
                 .select('role')
                 .eq('id', userId)
                 .single();
 
-            if (data) {
-                setRole(data.role);
-            } else {
-                setRole(null);
+            if (userData?.role) {
+                setRole(userData.role);
+                return;
             }
+            if (userError && userError.code !== 'PGRST116') { // PGRST116 = 0 rows
+                console.error("Error fetching role from 'users':", userError);
+            }
+
+            // Fallback para a tabela 'profiles' se não encontrar na 'users'
+            const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', userId)
+                .single();
+
+            if (profileData?.role) {
+                setRole(profileData.role);
+                return;
+            }
+            if (profileError && profileError.code !== 'PGRST116') {
+                console.error("Error fetching role from 'profiles':", profileError);
+            }
+            
+            // Se não encontrar em nenhuma, define como nulo
+            setRole(null);
+
         } catch (error) {
             console.error("Error fetching role:", error);
             setRole(null);
@@ -40,24 +62,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     useEffect(() => {
-        // Check active sessions and sets the user
+        setLoading(true);
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                fetchRole(session.user.id);
+            const currentUser = session?.user ?? null;
+            setUser(currentUser);
+            if (currentUser) {
+                fetchRole(currentUser.id);
             } else {
                 setLoading(false);
             }
         });
 
-        // Listen for changes on auth state (sign in, sign out, etc.)
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                setLoading(true); // Reset loading when user changes
-                fetchRole(session.user.id);
+            const currentUser = session?.user ?? null;
+            setUser(currentUser);
+            if (currentUser) {
+                setLoading(true);
+                fetchRole(currentUser.id);
             } else {
                 setRole(null);
                 setLoading(false);
@@ -67,11 +90,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => subscription.unsubscribe();
     }, []);
 
-    // Removed the separate useEffect for loading state as it's now handled in fetchRole and onAuthStateChange
-
     const signOut = async () => {
         await supabase.auth.signOut();
         setRole(null);
+        setUser(null);
+        setSession(null);
     };
 
     const value = {
