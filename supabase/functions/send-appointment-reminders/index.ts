@@ -35,6 +35,7 @@ serve(async (req) => {
         professionals (name)
       `)
       .eq('date', today)
+      .eq('reminder_sent', false) // <-- BUG FIX: Only select reminders that have not been sent
       .neq('status', 'Cancelado');
 
     if (error) {
@@ -58,7 +59,6 @@ serve(async (req) => {
         continue;
       }
 
-      // MELHORIA: Usar configuração personalizada para determinar se é "amanhã" ou "hoje"
       const apptHour = parseInt(appt.time.split(':')[0]);
       const earlyThreshold = parseInt(reminderConfig.early_threshold_hour.split(':')[0]);
       
@@ -96,6 +96,12 @@ serve(async (req) => {
         });
 
         if (response.ok) {
+            // BUG FIX: Update the reminder_sent flag to true after sending
+            await supabaseAdmin
+              .from('appointments')
+              .update({ reminder_sent: true })
+              .eq('id', appt.id);
+
             results.push({ id: appt.id, status: 'sent', phone: cleanPhone });
         } else {
             const errText = await response.text();

@@ -15,6 +15,7 @@ interface AppContextType {
   updateBusiness: (business: Partial<Business>) => Promise<void>;
   addAppointment: (appt: Omit<Appointment, "id" | "created_at">) => Promise<void>;
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
+  updateAppointmentReminderSent: (id: string, sent: boolean) => Promise<void>;
   completeAppointment: (id: string, paymentMethod: string, amountPaid: number) => Promise<void>;
   rescheduleAppointment: (id: string, newDate: string, newTime: string) => Promise<void>;
   addService: (service: Omit<Service, "id">, linkedProfessionalIds?: string[]) => Promise<void>;
@@ -306,6 +307,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await fetchData();
   };
 
+  const updateAppointmentReminderSent = async (id: string, sent: boolean) => {
+    const { error } = await supabase
+        .from('appointments')
+        .update({ reminder_sent: sent })
+        .eq('id', id);
+    if (error) throw error;
+    await fetchData();
+  };
+
   const completeAppointment = async (id: string, paymentMethod: string, amountPaid: number) => {
     const { error } = await supabase
       .from('appointments')
@@ -332,6 +342,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const sendDailyReminders = async () => {
     const { data, error } = await supabase.functions.invoke('send-appointment-reminders', {});
     if (error) throw error;
+    await fetchData(); // Refresh data after sending reminders
     return data;
   };
 
@@ -356,6 +367,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteProfessional,
         addAppointment,
         updateAppointmentStatus,
+        updateAppointmentReminderSent,
         completeAppointment,
         rescheduleAppointment,
         uploadProfessionalAvatar,

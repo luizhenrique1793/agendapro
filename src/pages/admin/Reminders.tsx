@@ -168,8 +168,8 @@ const getStatusText = (status: 'pending' | 'sent' | 'failed') => {
 };
 
 const Reminders: React.FC = () => {
-  const { appointments, currentBusiness, services, sendDailyReminders } = useApp();
-  const { reminders, loading, loadReminders } = useReminders(currentBusiness, appointments);
+  const { appointments, currentBusiness, services, sendDailyReminders, updateAppointmentReminderSent } = useApp();
+  const { reminders, loading } = useReminders(currentBusiness, appointments);
   const [filter, setFilter] = useState<'all' | 'pending' | 'sent' | 'failed'>('all');
   const [showDetails, setShowDetails] = useState<Record<string, boolean>>({});
   const [sendingManual, setSendingManual] = useState<string | null>(null);
@@ -237,13 +237,8 @@ const Reminders: React.FC = () => {
 
       if (response.ok) {
         // Atualizar reminder_sent no banco após envio bem-sucedido
-        await supabase
-          .from('appointments')
-          .update({ reminder_sent: true })
-          .eq('id', appointment.id);
+        await updateAppointmentReminderSent(appointment.id, true);
         
-        // Recarregar lista para atualizar status
-        loadReminders();
         alert('Lembrete enviado com sucesso!');
       } else {
         alert('Falha ao enviar lembrete');
