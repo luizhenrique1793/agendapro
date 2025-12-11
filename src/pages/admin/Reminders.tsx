@@ -25,48 +25,17 @@ interface ReminderInfo {
   isPreviousDay: boolean; // Se será enviado no dia anterior
 }
 
-const Reminders: React.FC = () => {
-  const { appointments, currentBusiness, services, sendDailyReminders } = useApp();
+// Hook personalizado para gerenciar lembretes
+const useReminders = (currentBusiness: any, appointments: Appointment[]) => {
   const [reminders, setReminders] = useState<ReminderInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'sent' | 'failed'>('all');
-  const [showDetails, setShowDetails] = useState<Record<string, boolean>>({});
-  const [sendingManual, setSendingManual] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (currentBusiness) {
-      loadReminders();
-    }
-  }, [currentBusiness, appointments]);
-
-  // Verificação automática a cada 2 minutos
-  useEffect(() => {
-    const interval = setInterval(() => {
-      checkAndSendPendingReminders();
-    }, 2 * 60 * 1000); // 2 minutos
-
-    return () => clearInterval(interval);
-  }, [reminders, currentBusiness]);
-
-  const loadReminders = () => {
-    setLoading(true);
-    
-    // Configuração padrão se não existir
-    const defaultConfig: ReminderConfig = {
-      same_day_enabled: true,
-      previous_day_time: "19:00",
-      early_threshold_hour: "09:00",
-      previous_day_enabled: true,
-      same_day_hours_before: 2
-    };
-    
-    const config = currentBusiness?.reminder_config || defaultConfig;
-    
-    // Processar agendamentos para calcular quando os lembretes serão enviados
-    const processedReminders: ReminderInfo[] = appointments
+  // Função para processar lembretes baseado nos agendamentos
+  const processReminders = (appointments: Appointment[], config: ReminderConfig): ReminderInfo[] => {
+    return appointments
       .filter(appt => appt.status !== 'Cancelado' && appt.status !== 'Concluído')
       .map(appt => {
-        // Criar data do agendamento de forma mais robusta
+        // Criar data do agendamento de forma robusta
         const [year, month, day] = appt.date.split('-').map(Number);
         const [hours, minutes] = appt.time.split(':').map(Number);
         const apptDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
@@ -80,7 +49,7 @@ const Reminders: React.FC = () => {
         // Verificar se deve enviar no dia anterior
         if (config.previous_day_enabled && apptHour < earlyThreshold) {
           // Enviar no dia anterior no horário configurado
-          const previousDay = new Date(year, month - 1, day - 1); // Dia anterior
+          const previousDay = new Date(year, month - 1, day - 1);
           
           const [reminderHours, reminderMinutes] = config.previous_day_time.split(':').map(Number);
           previousDay.setHours(reminderHours, reminderMinutes, 0, 0);
@@ -109,11 +78,29 @@ const Reminders: React.FC = () => {
         };
       })
       .sort((a, b) => a.willBeSentAt.getTime() - b.willBeSentAt.getTime());
+  };
 
+  // Carregar lembretes
+  const loadReminders = () => {
+    setLoading(true);
+    
+    // Configuração padrão se não existir
+    const defaultConfig: ReminderConfig = {
+      same_day_enabled: true,
+      previous_day_time: "19:00",
+      early_threshold_hour: "09:00",
+      previous_day_enabled: true,
+      same_day_hours_before: 2
+    };
+    
+    const config = currentBusiness?.reminder_config || defaultConfig;
+    const processedReminders = processReminders(appointments, config);
+    
     setReminders(processedReminders);
     setLoading(false);
   };
 
+  // Verificação automática a cada 2 minutos para enviar lembretes pendentes
   const checkAndSendPendingReminders = async () => {
     if (!currentBusiness?.evolution_api_config) return;
 
@@ -125,7 +112,7 @@ const Reminders: React.FC = () => {
         const config = currentBusiness.evolution_api_config;
         const clientFirstName = reminder.appointment.client_name.split(' ')[0];
         const time = reminder.appointment.time.substring(0, 5);
-        const serviceName = getServiceName(reminder.appointment.service_id);
+        const serviceName = getServiceName(reminder.appointment.service_id, services);
         const businessName = currentBusiness?.name || 'Barbearia';
         const proName = reminder.appointment.professional_id ? ' com profissional' : '';
         
@@ -173,11 +160,96 @@ const Reminders: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (currentBusiness) {
+      loadReminders();
+    }
+  }, [currentBusiness, appointments]);
+
+  // Verificação automática a cada 2 minutos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkAndSendPendingReminders();
+    }, 2 * 60 * 1000); // 2 minutos
+
+    return () => clearInterval(interval);
+  }, [reminders, currentBusiness]);
+
+  return { reminders, loading, loadReminders };
+};
+
+// Funções utilitárias
+const getServiceName = (serviceId: string, services: any[]) => {
+  const service = services.find(s => s.id === serviceId);
+  return service?.name || 'Não informado';
+};
+
+const formatDateTime = (date: Date) => {
+  if (!date || isNaN(date.getTime())) {
+    return "Data inválida";
+  }
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+const formatAppointmentDate = (dateStr: string) => {
+  try {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    if (isNaN(date.getTime())) {
+      return dateStr;
+    }
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch (error) {
+    return dateStr;
+  }
+};
+
+const getStatusIcon = (status: 'pending' | 'sent' | 'failed') => {
+  switch (status) {
+    case 'sent':
+      return <CheckCircle className="h-5 w-5 text-green-500" />;
+    case 'failed':
+      return <AlertCircle className="h-5 w-5 text-red-500" />;
+    default:
+      return <Clock className="h-5 w-5 text-yellow-500" />;
+  }
+};
+
+const getStatusText = (status: 'pending' | 'sent' | 'failed') => {
+  switch (status) {
+    case 'sent':
+      return 'Enviado';
+    case 'failed':
+      return 'Falha';
+    default:
+      return 'Pendente';
+  }
+};
+
+const Reminders: React.FC = () => {
+  const { appointments, currentBusiness, services, sendDailyReminders } = useApp();
+  const { reminders, loading, loadReminders } = useReminders(currentBusiness, appointments);
+  const [filter, setFilter] = useState<'all' | 'pending' | 'sent' | 'failed'>('all');
+  const [showDetails, setShowDetails] = useState<Record<string, boolean>>({});
+  const [sendingManual, setSendingManual] = useState<string | null>(null);
+
+  // Filtrar lembretes baseado no filtro selecionado
   const filteredReminders = reminders.filter(reminder => {
     if (filter === 'all') return true;
     return reminder.status === filter;
   });
 
+  // Alternar detalhes do lembrete
   const toggleReminderDetails = (appointmentId: string) => {
     setShowDetails(prev => ({
       ...prev,
@@ -185,63 +257,7 @@ const Reminders: React.FC = () => {
     }));
   };
 
-  const formatDateTime = (date: Date) => {
-    if (!date || isNaN(date.getTime())) {
-      return "Data inválida";
-    }
-    return date.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const formatAppointmentDate = (dateStr: string) => {
-    try {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      const date = new Date(year, month - 1, day);
-      if (isNaN(date.getTime())) {
-        return dateStr; // Retorna a string original se não conseguir parsear
-      }
-      return date.toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      });
-    } catch (error) {
-      return dateStr;
-    }
-  };
-
-  const getServiceName = (serviceId: string) => {
-    const service = services.find(s => s.id === serviceId);
-    return service?.name || 'Não informado';
-  };
-
-  const getStatusIcon = (status: 'pending' | 'sent' | 'failed') => {
-    switch (status) {
-      case 'sent':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
-      case 'failed':
-        return <AlertCircle className="h-5 w-5 text-red-500" />;
-      default:
-        return <Clock className="h-5 w-5 text-yellow-500" />;
-    }
-  };
-
-  const getStatusText = (status: 'pending' | 'sent' | 'failed') => {
-    switch (status) {
-      case 'sent':
-        return 'Enviado';
-      case 'failed':
-        return 'Falha';
-      default:
-        return 'Pendente';
-    }
-  };
-
+  // Enviar lembrete manualmente
   const sendManualReminder = async (appointment: Appointment) => {
     if (!currentBusiness?.evolution_api_config) {
       alert('WhatsApp não configurado para este negócio');
@@ -253,7 +269,7 @@ const Reminders: React.FC = () => {
       const config = currentBusiness.evolution_api_config;
       const clientFirstName = appointment.client_name.split(' ')[0];
       const time = appointment.time.substring(0, 5);
-      const serviceName = getServiceName(appointment.service_id);
+      const serviceName = getServiceName(appointment.service_id, services);
       const businessName = currentBusiness?.name || 'Barbearia';
       const proName = appointment.professional_id ? ' com profissional' : '';
       
@@ -323,6 +339,7 @@ const Reminders: React.FC = () => {
     <div className="flex h-screen bg-gray-50">
       <ManagerSidebar />
       <main className="flex-1 overflow-y-auto p-8">
+        {/* Cabeçalho */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Lembretes de Agendamento</h1>
           <p className="text-gray-500">
@@ -493,7 +510,7 @@ const Reminders: React.FC = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="font-medium">Serviço:</span>
-                            <span>{getServiceName(reminder.appointment.service_id)}</span>
+                            <span>{getServiceName(reminder.appointment.service_id, services)}</span>
                           </div>
                         </div>
                         
