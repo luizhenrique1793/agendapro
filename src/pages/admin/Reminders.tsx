@@ -26,7 +26,12 @@ interface ReminderInfo {
 }
 
 // Hook personalizado para gerenciar lembretes
-const useReminders = (currentBusiness: any, appointments: Appointment[]) => {
+const useReminders =<think>**Finalizing Implementation Steps**
+
+I'm now fully prepared to implement the solutions. This entails updating the SQL function to include the `202` status code and incorporate detailed logging using `RAISE NOTICE` and `RAISE WARNING` calls for troubleshooting. Simultaneously, I'll remove the client-side reminder-sending logic, specifically the `useEffect` hook, from the `src/pages/admin/Reminders.tsx` file. Both tasks are completed.
+
+
+</think> (currentBusiness: any, appointments: Appointment[]) => {
   const [reminders, setReminders] = useState<ReminderInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -100,80 +105,11 @@ const useReminders = (currentBusiness: any, appointments: Appointment[]) => {
     setLoading(false);
   };
 
-  // Verificação automática a cada 2 minutos para enviar lembretes pendentes
-  const checkAndSendPendingReminders = async () => {
-    if (!currentBusiness?.evolution_api_config) return;
-
-    const now = new Date();
-    const pendingReminders = reminders.filter(r => r.status === 'pending' && r.willBeSentAt < now);
-    
-    for (const reminder of pendingReminders) {
-      try {
-        const config = currentBusiness.evolution_api_config;
-        const clientFirstName = reminder.appointment.client_name.split(' ')[0];
-        const time = reminder.appointment.time.substring(0, 5);
-        const serviceName = getServiceName(reminder.appointment.service_id, services);
-        const businessName = currentBusiness?.name || 'Barbearia';
-        const proName = reminder.appointment.professional_id ? ' com profissional' : '';
-        
-        let timeDescription;
-        if (reminder.isPreviousDay) {
-          timeDescription = 'amanhã';
-        } else {
-          timeDescription = 'hoje';
-        }
-        
-        const message = `🔔 Lembrete Automático\n\nOlá ${clientFirstName}! Seu horário na *${businessName}* é ${timeDescription}, às *${time}*.\n\nServiço: ${serviceName}${proName}\n\nCaso não possa comparecer, por favor nos avise.`;
-
-        const normalizedUrl = config.serverUrl.replace(/\/$/, "");
-        const endpoint = `${normalizedUrl}/message/sendText/${config.instanceName}`;
-        const cleanPhone = reminder.appointment.client_phone.replace(/\D/g, "");
-
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 
-            'apikey': config.apiKey, 
-            'Content-Type': 'application/json' 
-          },
-          body: JSON.stringify({
-            number: cleanPhone,
-            text: message,
-            options: { delay: 1000 }
-          })
-        });
-
-        if (response.ok) {
-          // Atualizar status no banco
-          await supabase
-            .from('appointments')
-            .update({ reminder_sent: true })
-            .eq('id', reminder.appointment.id);
-        }
-      } catch (error) {
-        console.error('Erro ao enviar lembrete automático:', error);
-      }
-    }
-    
-    // Recarregar lista após processar
-    if (pendingReminders.length > 0) {
-      loadReminders();
-    }
-  };
-
   useEffect(() => {
     if (currentBusiness) {
       loadReminders();
     }
   }, [currentBusiness, appointments]);
-
-  // Verificação automática a cada 2 minutos
-  useEffect(() => {
-    const interval = setInterval(() => {
-      checkAndSendPendingReminders();
-    }, 2 * 60 * 1000); // 2 minutos
-
-    return () => clearInterval(interval);
-  }, [reminders, currentBusiness]);
 
   return { reminders, loading, loadReminders };
 };
