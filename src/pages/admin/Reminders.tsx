@@ -15,6 +15,7 @@ import {
   EyeOff
 } from "lucide-react";
 import { Appointment, ReminderConfig } from "../../types";
+import { supabase } from "../../lib/supabase";
 
 interface ReminderInfo {
   appointment: Appointment;
@@ -37,6 +38,15 @@ const Reminders: React.FC = () => {
       loadReminders();
     }
   }, [currentBusiness, appointments]);
+
+  // Verificação automática a cada 2 minutos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkAndSendPendingReminders();
+    }, 2 * 60 * 1000); // 2 minutos
+
+    return () => clearInterval(interval);
+  }, [reminders, currentBusiness]);
 
   const loadReminders = () => {
     setLoading(true);
@@ -102,6 +112,65 @@ const Reminders: React.FC = () => {
 
     setReminders(processedReminders);
     setLoading(false);
+  };
+
+  const checkAndSendPendingReminders = async () => {
+    if (!currentBusiness?.evolution_api_config) return;
+
+    const now = new Date();
+    const pendingReminders = reminders.filter(r => r.status === 'pending' && r.willBeSentAt < now);
+    
+    for (const reminder of pendingReminders) {
+      try {
+        const config = currentBusiness.evolution_api_config;
+        const clientFirstName = reminder.appointment.client_name.split(' ')[0];
+        const time = reminder.appointment.time.substring(0, 5);
+        const serviceName = getServiceName(reminder.appointment.service_id);
+        const businessName = currentBusiness?.name || 'Barbearia';
+        const proName = reminder.appointment.professional_id ? ' com profissional' : '';
+        
+        let timeDescription;
+        if (reminder.isPreviousDay) {
+          timeDescription = 'amanhã';
+        } else {
+          timeDescription = 'hoje';
+        }
+        
+        const message = `🔔 Lembrete Automático\n\nOlá ${clientFirstName}! Seu horário na *${businessName}* é ${timeDescription}, às *${time}*.\n\nServiço: ${serviceName}${proName}\n\nCaso não possa comparecer, por favor nos avise.`;
+
+        const normalizedUrl = config.serverUrl.replace(/\/$/, "");
+        const endpoint = `${normalizedUrl}/message/sendText/${config.instanceName}`;
+        const cleanPhone = reminder.appointment.client_phone.replace(/\D/g, "");
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 
+            'apikey': config.apiKey, 
+            'Content-Type': 'application/json' 
+          },
+          body: JSON.stringify({
+            number: cleanPhone,
+            text: message,
+            options: { delay: 1000 }
+          })
+        });
+
+        if (response.ok) {
+          // Atualizar status no banco
+          await supabase
+            .from('appointments')
+            .update({ reminder_sent: true })
+            .eq('id', reminder.appointment.id);
+        }
+      } catch (error) {
+        console.error('Erro ao enviar lembrete automático:', error);
+      }
+    }
+    
+    // Recarregar lista após processar
+    if (pendingReminders.length > 0) {
+      loadReminders();
+    }
   };
 
   const filteredReminders = reminders.filter(reminder => {
@@ -186,6 +255,7 @@ const Reminders: React.FC = () => {
       const time = appointment.time.substring(0, 5);
       const serviceName = getServiceName(appointment.service_id);
       const businessName = currentBusiness?.name || 'Barbearia';
+      const proName = appointment.professional_id ? ' com profissional' : '';
       
       // Verificar se é para amanhã ou hoje baseado na configuração
       const reminderConfig = currentBusiness?.reminder_config;
@@ -199,7 +269,7 @@ const Reminders: React.FC = () => {
         timeDescription = 'hoje';
       }
       
-      const message = `🔔 Lembrete Manual\n\nOlá ${clientFirstName}! Seu horário na *${businessName}* é ${timeDescription}, às *${time}*.\n\nServiço: ${serviceName}\n\nCaso não possa comparecer, por favor nos avise.`;
+      const message = `🔔 Lembrete Manual\n\nOlá ${clientFirstName}! Seu horário na *${businessName}* é ${timeDescription}, às *${time}*.\n\nServiço: ${serviceName}${proName}\n\nCaso não possa comparecer, por favor nos avise.`;
 
       const normalizedUrl = config.serverUrl.replace(/\/$/, "");
       const endpoint = `${normalizedUrl}/message/sendText/${config.instanceName}`;
@@ -219,6 +289,12 @@ const Reminders: React.FC = () => {
       });
 
       if (response.ok) {
+        // Atualizar reminder_sent no banco após envio bem-sucedido
+        await supabase
+          .from('appointments')
+          .update({ reminder_sent: true })
+          .eq('id', appointment.id);
+        
         // Recarregar lista para atualizar status
         loadReminders();
         alert('Lembrete enviado com sucesso!');
@@ -273,11 +349,11 @@ const Reminders: React.FC = () => {
 
         {/* Filtros */}
         <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
               <Filter className="h-5 w-5 text-gray-400" />
               <span className="text-sm font-medium text-gray-700">Filtrar:</span>
-              <div className="flex gap-1">
+              <div className="flex gap-2">
                 {(['all', 'pending', 'sent', 'failed'] as const).map((f) => (
                   <button
                     key={f}
