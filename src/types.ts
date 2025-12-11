@@ -20,6 +20,8 @@ export interface Business {
   type: string;
   city: string;
   status: "Ativo" | "Inativo";
+  plan?: 'Básico' | 'Profissional' | 'Empresarial';
+  subscription_status?: 'active' | 'trialing' | 'past_due' | 'canceled';
   phone?: string;
   secondary_phone?: string;
   address?: string; // Mantido para compatibilidade, mas o foco será address_details

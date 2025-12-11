@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { AdminSidebar } from "../../components/AdminSidebar";
 import { useApp } from "../../store";
 import { PlusCircle, Search, Edit2, Power, Eye, ChevronLeft, ChevronRight, Copy, CheckCircle2 } from "lucide-react";
+import { Business } from "../../types";
 
 const CopyLinkButton: React.FC<{ slug: string }> = ({ slug }) => {
   const [copied, setCopied] = useState(false);
@@ -24,8 +25,37 @@ const CopyLinkButton: React.FC<{ slug: string }> = ({ slug }) => {
   );
 };
 
+const getSubscriptionStatusPill = (status: string | undefined) => {
+  switch (status) {
+    case 'active':
+      return <span className="bg-green-100 text-green-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">Ativa</span>;
+    case 'trialing':
+      return <span className="bg-blue-100 text-blue-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">Em Teste</span>;
+    case 'past_due':
+      return <span className="bg-yellow-100 text-yellow-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">Pendente</span>;
+    case 'canceled':
+      return <span className="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">Cancelada</span>;
+    default:
+      return <span className="bg-gray-100 text-gray-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">N/A</span>;
+  }
+};
+
 const Businesses: React.FC = () => {
   const { businesses } = useApp();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [planFilter, setPlanFilter] = useState("all");
+  const [subscriptionStatusFilter, setSubscriptionStatusFilter] = useState("all");
+
+  const filteredBusinesses = businesses.filter(business => {
+    const matchesSearch = business.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = typeFilter === 'all' || business.type === typeFilter;
+    const matchesStatus = statusFilter === 'all' || business.status === statusFilter;
+    const matchesPlan = planFilter === 'all' || business.plan === planFilter;
+    const matchesSubscription = subscriptionStatusFilter === 'all' || business.subscription_status === subscriptionStatusFilter;
+    return matchesSearch && matchesType && matchesStatus && matchesPlan && matchesSubscription;
+  });
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -41,9 +71,9 @@ const Businesses: React.FC = () => {
 
         {/* Filters */}
         <div className="mb-8 rounded-xl bg-white p-4 shadow-sm">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div className="flex flex-col">
-              <label className="mb-2 text-sm font-medium text-gray-900">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3 lg:grid-cols-5">
+            <div className="lg:col-span-2">
+              <label className="mb-2 block text-sm font-medium text-gray-900">
                 Buscar por nome...
               </label>
               <div className="relative">
@@ -51,29 +81,43 @@ const Businesses: React.FC = () => {
                 <input
                   type="text"
                   placeholder="Digite o nome do negócio"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                   className="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 pl-10 text-sm text-gray-900 focus:border-primary-500 focus:ring-primary-500"
                 />
               </div>
             </div>
-            <div className="flex flex-col">
-              <label className="mb-2 text-sm font-medium text-gray-900">
-                Tipo de negócio
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-900">
+                Plano
               </label>
-              <select className="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-primary-500">
-                <option>Todos os tipos</option>
-                <option>Barbearia</option>
-                <option>Salão de Beleza</option>
-                <option>Clínica</option>
+              <select value={planFilter} onChange={e => setPlanFilter(e.target.value)} className="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-primary-500">
+                <option value="all">Todos os Planos</option>
+                <option value="Básico">Básico</option>
+                <option value="Profissional">Profissional</option>
+                <option value="Empresarial">Empresarial</option>
               </select>
             </div>
-            <div className="flex flex-col">
-              <label className="mb-2 text-sm font-medium text-gray-900">
-                Status
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-900">
+                Status da Assinatura
               </label>
-              <select className="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-primary-500">
-                <option>Todos</option>
-                <option>Ativo</option>
-                <option>Inativo</option>
+              <select value={subscriptionStatusFilter} onChange={e => setSubscriptionStatusFilter(e.target.value)} className="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-primary-500">
+                <option value="all">Todos os Status</option>
+                <option value="active">Ativa</option>
+                <option value="trialing">Em Teste</option>
+                <option value="past_due">Pendente</option>
+                <option value="canceled">Cancelada</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-900">
+                Status do Negócio
+              </label>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-primary-500">
+                <option value="all">Todos</option>
+                <option value="Ativo">Ativo</option>
+                <option value="Inativo">Inativo</option>
               </select>
             </div>
           </div>
@@ -85,14 +129,15 @@ const Businesses: React.FC = () => {
             <thead className="bg-gray-50 text-xs uppercase text-gray-700">
               <tr>
                 <th scope="col" className="px-6 py-3">Nome</th>
-                <th scope="col" className="px-6 py-3">Tipo</th>
+                <th scope="col" className="px-6 py-3">Plano</th>
+                <th scope="col" className="px-6 py-3">Status Assinatura</th>
                 <th scope="col" className="px-6 py-3">Link Público</th>
                 <th scope="col" className="px-6 py-3">Status</th>
                 <th scope="col" className="px-6 py-3">Ações</th>
               </tr>
             </thead>
             <tbody>
-              {businesses.map((business) => (
+              {filteredBusinesses.map((business) => (
                 <tr
                   key={business.id}
                   className="border-b bg-white hover:bg-gray-50 last:border-0"
@@ -100,7 +145,8 @@ const Businesses: React.FC = () => {
                   <td className="whitespace-nowrap px-6 py-4 font-medium text-gray-900">
                     {business.name}
                   </td>
-                  <td className="px-6 py-4">{business.type}</td>
+                  <td className="px-6 py-4">{business.plan || 'N/A'}</td>
+                  <td className="px-6 py-4">{getSubscriptionStatusPill(business.subscription_status)}</td>
                   <td className="px-6 py-4">
                     {business.slug && <CopyLinkButton slug={business.slug} />}
                   </td>
@@ -113,15 +159,7 @@ const Businesses: React.FC = () => {
                             : "bg-gray-500"
                         }`}
                       ></div>
-                      <span
-                        className={`rounded px-2.5 py-0.5 text-xs font-medium ${
-                          business.status === "Ativo"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
-                        {business.status}
-                      </span>
+                      {business.status}
                     </div>
                   </td>
                   <td className="px-6 py-4">
