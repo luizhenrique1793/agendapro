@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from "react";
 import {
   BarChart,
@@ -51,7 +53,7 @@ const StatCard: React.FC<{
 
 const BookingLinkCard: React.FC = () => {
   const { currentBusiness } = useApp();
-  const [copySuccess, setCopySuccess] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   if (!currentBusiness?.slug) {
     return null; // Or a loading skeleton
@@ -61,8 +63,8 @@ const BookingLinkCard: React.FC = () => {
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(bookingLink);
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2000);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -85,12 +87,8 @@ const BookingLinkCard: React.FC = () => {
           onClick={copyToClipboard}
           className="flex shrink-0 items-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-500"
         >
-          {copySuccess ? (
-            <CheckCircle2 className="mr-2 h-4 w-4" />
-          ) : (
-            <Copy className="mr-2 h-4 w-4" />
-          )}
-          {copySuccess ? "Copiado!" : "Copiar"}
+          {copied ? <CheckCircle2 className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+          {copied ? "Copiado!" : "Copiar"}
         </button>
       </div>
     </div>
@@ -98,7 +96,52 @@ const BookingLinkCard: React.FC = () => {
 };
 
 const Dashboard: React.FC = () => {
-  const { appointments } = useApp();
+  const { appointments, services, clients } = useApp();
+
+  // Calcular métricas reais
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+
+  // Agendamentos concluídos no mês atual
+  const completedAppointmentsThisMonth = appointments.filter(appt => {
+    const apptDate = new Date(appt.date);
+    return appt.status === 'Concluído' && 
+           apptDate.getMonth() === currentMonth && 
+           apptDate.getFullYear() === currentYear;
+  });
+
+  // Faturamento do mês: soma dos valores dos serviços concluídos
+  const monthlyRevenue = completedAppointmentsThisMonth.reduce((total, appt) => {
+    const service = services.find(s => s.id === appt.service_id);
+    return total + (service?.price || 0);
+  }, 0);
+
+  // Novos clientes no mês: clientes únicos que fizeram agendamento no mês
+  const clientsThisMonth = new Set(
+    appointments
+      .filter(appt => {
+        const apptDate = new Date(appt.date);
+        return apptDate.getMonth() === currentMonth && 
+               apptDate.getFullYear() === currentYear;
+      })
+      .map(appt => appt.client_id || appt.client_name)
+  );
+  const newClientsThisMonth = clientsThisMonth.size;
+
+  // Ticket médio: faturamento / número de agendamentos concluídos
+  const averageTicket = completedAppointmentsThisMonth.length > 0 
+    ? monthlyRevenue / completedAppointmentsThisMonth.length 
+    : 0;
+
+  // Próximos agendamentos: pendentes ordenados por data/hora
+  const upcomingAppointments = appointments
+    .filter(appt => appt.status === 'Pendente')
+    .sort((a, b) => {
+      const dateA = new Date(`${a.date}T${a.time}`);
+      const dateB = new Date(`${b.date}T${b.time}`);
+      return dateA.getTime() - dateB.getTime();
+    })
+    .slice(0, 5); // Apenas os próximos 5
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -114,28 +157,28 @@ const Dashboard: React.FC = () => {
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Agendamentos Hoje"
-            value={appointments.length.toString()}
+            value={appointments.filter(appt => appt.date === new Date().toISOString().split('T')[0]).length.toString()}
             icon={Calendar}
             trend="+12%"
             positive={true}
           />
           <StatCard
             title="Faturamento (Mês)"
-            value="R$ 12.450"
+            value={`R$ ${monthlyRevenue.toFixed(2)}`}
             icon={DollarSign}
             trend="+8.2%"
             positive={true}
           />
           <StatCard
-            title="Novos Clientes"
-            value="48"
+            title="Novos Clientes (Mês)"
+            value={newClientsThisMonth.toString()}
             icon={Users}
             trend="-2%"
             positive={false}
           />
           <StatCard
             title="Ticket Médio"
-            value="R$ 85,00"
+            value={`R$ ${averageTicket.toFixed(2)}`}
             icon={TrendingUp}
             trend="+4%"
             positive={true}
@@ -183,41 +226,43 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Recent Appointments */}
+          {/* Próximos Agendamentos */}
           <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
             <h3 className="mb-6 text-lg font-bold text-gray-900">
-              Últimos Agendamentos
+              Próximos Agendamentos
             </h3>
             <div className="space-y-4">
-              {appointments.slice(0, 5).map((appt) => (
-                <div
-                  key={appt.id}
-                  className="flex items-center justify-between border-b border-gray-50 pb-4 last:border-0 last:pb-0"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-600">
-                      {appt.client_name.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {appt.client_name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {appt.date} às {appt.time}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      appt.status === "Confirmado"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-yellow-100 text-yellow-800"
-                    }`}
-                  >
-                    {appt.status}
-                  </span>
+              {upcomingAppointments.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Nenhum agendamento pendente.</p>
                 </div>
-              ))}
+              ) : (
+                upcomingAppointments.map((appt) => (
+                  <div
+                    key={appt.id}
+                    className="flex items-center justify-between border-b border-gray-50 pb-4 last:border-0 last:pb-0"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-600">
+                        {appt.client_name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {appt.client_name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(appt.date).toLocaleDateString('pt-BR')} às {appt.time}
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className="rounded-full px-2.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800"
+                    >
+                      Pendente
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
