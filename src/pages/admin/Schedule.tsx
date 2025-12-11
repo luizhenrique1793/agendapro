@@ -141,25 +141,118 @@ const Schedule: React.FC = () => {
     }
   };
 
+  const getServiceInfo = (serviceId: string) => {
+    const service = services.find(s => s.id === serviceId);
+    return service ? { name: service.name, price: service.price } : { name: 'Serviço não encontrado', price: 0 };
+  };
+
   const DayView = () => (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
       {timeSlots.map((hour) => (
         <div key={hour} className="group flex min-h-[100px] border-b border-gray-100 last:border-0">
-          <div className="w-20 border-r border-gray-100 p-4 text-center"><span className="text-sm font-medium text-gray-500">{hour}:00</span></div>
+          <div className="w-20 border-r border-gray-100 p-4 text-center text-sm font-medium text-gray-500">
+            {hour}:00
+          </div>
           <div className="flex flex-1 gap-4 p-2 relative">
             <div className="absolute top-1/2 left-0 w-full border-t border-dashed border-gray-100 pointer-events-none"></div>
-            {getAppointmentsForHour(toLocalDateString(currentDate), hour).map((appt) => (
-              <button key={appt.id} onClick={() => handleAppointmentClick(appt)} className={`relative z-10 flex w-full max-w-[250px] flex-col items-start rounded-lg border-l-4 p-2 text-xs hover:shadow-md transition-shadow text-left ${getStatusColor(appt.status)}`}>
-                <div className="flex items-center gap-1 font-bold text-gray-800"><Clock className="h-3 w-3" />{appt.time}</div>
-                <div className="mt-1 font-semibold text-gray-900">{appt.client_name}</div>
-                <div className="text-gray-600">{appt.client_phone}</div>
-              </button>
-            ))}
+            {getAppointmentsForHour(toLocalDateString(currentDate), hour).map((appt) => {
+              const serviceInfo = getServiceInfo(appt.service_id);
+              return (
+                <button 
+                  key={appt.id} 
+                  onClick={() => handleAppointmentClick(appt)} 
+                  className={`relative z-10 flex w-full max-w-[300px] flex-col rounded-lg border-l-4 p-3 text-xs hover:shadow-md transition-shadow text-left ${getStatusColor(appt.status)}`}
+                >
+                  <div className="flex items-center gap-1 font-bold text-gray-800 mb-1">
+                    <Clock className="h-3 w-3" />{appt.time}
+                  </div>
+                  <div className="font-semibold text-gray-900 mb-1">{appt.client_name}</div>
+                  <div className="text-gray-600 mb-1">{appt.client_phone}</div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500 truncate">{serviceInfo.name}</span>
+                    <span className="font-medium text-gray-700 ml-2">R$ {serviceInfo.price.toFixed(2)}</span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       ))}
     </div>
   );
+
+  const WeekView = () => {
+    const startOfWeek = new Date(currentDate);
+    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay()); // Sunday
+    
+    const weekDays = Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(startOfWeek);
+      day.setDate(startOfWeek.getDate() + i);
+      return day;
+    });
+
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        {/* Header with days */}
+        <div className="grid grid-cols-8 border-b border-gray-200 bg-gray-50">
+          <div className="p-4 text-center text-sm font-semibold text-gray-600 border-r border-gray-200">Horário</div>
+          {weekDays.map((day, index) => {
+            const isToday = toLocalDateString(day) === toLocalDateString(new Date());
+            return (
+              <div key={index} className={`p-4 text-center border-r border-gray-200 last:border-r-0 ${isToday ? 'bg-primary-50' : ''}`}>
+                <div className={`text-sm font-medium ${isToday ? 'text-primary-700' : 'text-gray-600'}`}>
+                  {day.toLocaleDateString('pt-BR', { weekday: 'short' })}
+                </div>
+                <div className={`text-lg font-bold ${isToday ? 'text-primary-800' : 'text-gray-900'}`}>
+                  {day.getDate()}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Time slots */}
+        {timeSlots.map((hour) => (
+          <div key={hour} className="grid grid-cols-8 border-b border-gray-100 last:border-0 min-h-[80px]">
+            <div className="p-4 text-center text-sm font-medium text-gray-500 border-r border-gray-200 flex items-center justify-center">
+              {hour}:00
+            </div>
+            {weekDays.map((day) => {
+              const dateStr = toLocalDateString(day);
+              const hourAppts = getAppointmentsForHour(dateStr, hour);
+              
+              return (
+                <div key={day.getTime()} className="p-2 border-r border-gray-200 last:border-r-0 space-y-1">
+                  {hourAppts.slice(0, 2).map((appt) => {
+                    const serviceInfo = getServiceInfo(appt.service_id);
+                    return (
+                      <button 
+                        key={appt.id} 
+                        onClick={() => handleAppointmentClick(appt)} 
+                        className={`block w-full text-left p-2 rounded border-l-4 text-xs hover:shadow-sm transition-shadow ${getStatusColor(appt.status)}`}
+                      >
+                        <div className="font-semibold text-gray-900 truncate">{appt.client_name}</div>
+                        <div className="text-gray-600 truncate">{serviceInfo.name}</div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-gray-500">{appt.time}</span>
+                          <span className="font-medium text-gray-700">R$ {serviceInfo.price.toFixed(2)}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {hourAppts.length > 2 && (
+                    <div className="text-xs text-gray-500 text-center py-1">
+                      +{hourAppts.length - 2} mais
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const MonthView = () => {
     const year = currentDate.getFullYear();
@@ -174,23 +267,40 @@ const Schedule: React.FC = () => {
     return (
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
-          {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((day) => <div key={day} className="py-2 text-center text-sm font-semibold text-gray-600">{day}</div>)}
+          {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((day) => <div key={day} className="py-3 text-center text-sm font-semibold text-gray-600">{day}</div>)}
         </div>
         <div className="grid grid-cols-7">
           {totalSlots.map((day, idx) => {
-            if (!day) return <div key={`empty-${idx}`} className="border-b border-r border-gray-100 bg-gray-50/30 h-32"></div>;
+            if (!day) return <div key={`empty-${idx}`} className="border-b border-r border-gray-100 bg-gray-50/30 h-40"></div>;
             const dateStr = toLocalDateString(new Date(year, month, day));
             const dayAppts = getAppointmentsForDate(dateStr);
             const isToday = toLocalDateString(new Date()) === dateStr;
             return (
-              <div key={day} className="flex h-32 flex-col border-b border-r border-gray-100 p-2 hover:bg-gray-50 transition-colors">
-                <span className={`mb-1 flex h-6 w-6 items-center justify-center rounded-full text-sm ${isToday ? 'bg-primary-600 text-white font-bold' : 'text-gray-700'}`}>{day}</span>
+              <div key={day} className="flex h-40 flex-col border-b border-r border-gray-100 p-2 hover:bg-gray-50 transition-colors">
+                <span className={`mb-2 flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold ${isToday ? 'bg-primary-600 text-white' : 'text-gray-700'}`}>{day}</span>
                 <div className="flex-1 overflow-y-auto space-y-1">
-                  {dayAppts.map((appt) => (
-                    <button key={appt.id} onClick={() => handleAppointmentClick(appt)} className={`block w-full truncate rounded px-1.5 py-0.5 text-xs text-left ${getStatusColor(appt.status).replace('border-l-4', '')}`}>
-                      {appt.time} {appt.client_name.split(" ")[0]}
-                    </button>
-                  ))}
+                  {dayAppts.slice(0, 3).map((appt) => {
+                    const serviceInfo = getServiceInfo(appt.service_id);
+                    return (
+                      <button 
+                        key={appt.id} 
+                        onClick={() => handleAppointmentClick(appt)} 
+                        className={`block w-full text-left p-1.5 rounded text-xs hover:shadow-sm transition-shadow ${getStatusColor(appt.status).replace('border-l-4', 'border-l-2')}`}
+                      >
+                        <div className="font-medium text-gray-900 truncate text-xs">{appt.client_name}</div>
+                        <div className="text-gray-600 truncate text-xs">{serviceInfo.name}</div>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <span className="text-gray-500 text-xs">{appt.time}</span>
+                          <span className="font-medium text-gray-700 text-xs">R$ {serviceInfo.price.toFixed(2)}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {dayAppts.length > 3 && (
+                    <div className="text-xs text-gray-500 text-center py-0.5">
+                      +{dayAppts.length - 3} mais
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -246,6 +356,8 @@ const Schedule: React.FC = () => {
       );
     }
 
+    const serviceInfo = getServiceInfo(selectedAppointment.service_id);
+
     return (
       <div className="space-y-4">
         <div>
@@ -256,6 +368,11 @@ const Schedule: React.FC = () => {
         <div>
           <p className="text-sm font-medium text-gray-500">Profissional</p>
           <p className="text-base text-gray-900">{professionals.find(p => p.id === selectedAppointment.professional_id)?.name || 'N/A'}</p>
+        </div>
+        <div>
+          <p className="text-sm font-medium text-gray-500">Serviço</p>
+          <p className="text-base text-gray-900">{serviceInfo.name}</p>
+          <p className="text-sm text-gray-600">R$ {serviceInfo.price.toFixed(2)}</p>
         </div>
         <div className="flex gap-6">
           <div>
@@ -359,6 +476,7 @@ const Schedule: React.FC = () => {
         </div>
 
         {view === 'day' && <DayView />}
+        {view === 'week' && <WeekView />}
         {view === 'month' && <MonthView />}
         {/* WeekView can be added here if needed */}
 
