@@ -26,12 +26,7 @@ interface ReminderInfo {
 }
 
 // Hook personalizado para gerenciar lembretes
-const useReminders =<think>**Finalizing Implementation Steps**
-
-I'm now fully prepared to implement the solutions. This entails updating the SQL function to include the `202` status code and incorporate detailed logging using `RAISE NOTICE` and `RAISE WARNING` calls for troubleshooting. Simultaneously, I'll remove the client-side reminder-sending logic, specifically the `useEffect` hook, from the `src/pages/admin/Reminders.tsx` file. Both tasks are completed.
-
-
-</think> (currentBusiness: any, appointments: Appointment[]) => {
+const useReminders = (currentBusiness: any, appointments: Appointment[]) => {
   const [reminders, setReminders] = useState<ReminderInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
