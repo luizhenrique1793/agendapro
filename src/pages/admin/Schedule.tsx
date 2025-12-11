@@ -25,6 +25,7 @@ const Schedule: React.FC = () => {
   const { appointments, services, professionals, updateAppointmentStatus, completeAppointment, rescheduleAppointment } = useApp();
   
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false);
@@ -36,17 +37,26 @@ const Schedule: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  // Get appointments for current week
-  const getWeekAppointments = () => {
-    const startOfWeek = new Date(currentDate);
-    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
-    
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
+  // Get appointments for current period (week or month)
+  const getPeriodAppointments = () => {
+    let startDate: Date;
+    let endDate: Date;
+
+    if (viewMode === 'week') {
+      startDate = new Date(currentDate);
+      startDate.setDate(currentDate.getDate() - currentDate.getDay());
+      
+      endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+    } else {
+      // Month view
+      startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    }
 
     return appointments.filter(appt => {
       const apptDate = new Date(appt.date);
-      return apptDate >= startOfWeek && apptDate <= endOfWeek;
+      return apptDate >= startDate && apptDate <= endDate;
     }).filter(appt => {
       if (statusFilter === "all") return true;
       return appt.status === statusFilter;
@@ -56,19 +66,23 @@ const Schedule: React.FC = () => {
     });
   };
 
-  const weekAppointments = getWeekAppointments();
+  const periodAppointments = getPeriodAppointments();
 
   // Get appointments for specific day
   const getDayAppointments = (date: Date) => {
-    return weekAppointments.filter(appt => {
+    return periodAppointments.filter(appt => {
       const apptDate = new Date(appt.date);
       return apptDate.toDateString() === date.toDateString();
     }).sort((a, b) => a.time.localeCompare(b.time));
   };
 
-  const navigateWeek = (direction: 'prev' | 'next') => {
+  const navigatePeriod = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
-    newDate.setDate(currentDate.getDate() + (direction === 'next' ? 7 : -7));
+    if (viewMode === 'week') {
+      newDate.setDate(currentDate.getDate() + (direction === 'next' ? 7 : -7));
+    } else {
+      newDate.setMonth(currentDate.getMonth() + (direction === 'next' ? 1 : -1));
+    }
     setCurrentDate(newDate);
   };
 
@@ -215,6 +229,27 @@ const Schedule: React.FC = () => {
     );
   };
 
+  // Generate month calendar days
+  const generateMonthDays = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDate = new Date(firstDay);
+    startDate.setDate(firstDay.getDate() - firstDay.getDay());
+    
+    const days = [];
+    const current = new Date(startDate);
+    
+    while (current <= lastDay || days.length % 7 !== 0) {
+      days.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return days;
+  };
+
   return (
     <div className="flex h-screen bg-gray-50">
       <ManagerSidebar />
@@ -222,6 +257,26 @@ const Schedule: React.FC = () => {
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-2xl font-bold text-gray-900">Agenda</h1>
           <div className="flex items-center gap-4">
+            {/* View Mode Toggle */}
+            <div className="flex rounded-lg border border-gray-300 bg-white p-1">
+              <button
+                onClick={() => setViewMode('week')}
+                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                  viewMode === 'week' ? 'bg-primary-600 text-white' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Semana
+              </button>
+              <button
+                onClick={() => setViewMode('month')}
+                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                  viewMode === 'month' ? 'bg-primary-600 text-white' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                Mês
+              </button>
+            </div>
+
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
@@ -246,76 +301,136 @@ const Schedule: React.FC = () => {
           </div>
         </div>
 
-        {/* Week Navigation */}
+        {/* Period Navigation */}
         <div className="mb-6 flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <button
-            onClick={() => navigateWeek('prev')}
+            onClick={() => navigatePeriod('prev')}
             className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
           
           <h2 className="text-lg font-semibold text-gray-900">
-            {new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - currentDate.getDay()).toLocaleDateString('pt-BR', { 
-              month: 'long', 
-              year: 'numeric' 
-            })}
+            {viewMode === 'week' 
+              ? new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - currentDate.getDay()).toLocaleDateString('pt-BR', { 
+                  month: 'long', 
+                  year: 'numeric' 
+                })
+              : currentDate.toLocaleDateString('pt-BR', { 
+                  month: 'long', 
+                  year: 'numeric' 
+                })
+            }
           </h2>
           
           <button
-            onClick={() => navigateWeek('next')}
+            onClick={() => navigatePeriod('next')}
             className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
           >
             <ChevronRight className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Week Calendar */}
-        <div className="grid grid-cols-7 gap-4">
-          {Array.from({ length: 7 }, (_, i) => {
-            const date = new Date(currentDate);
-            date.setDate(currentDate.getDate() - currentDate.getDay() + i);
-            const dayAppointments = getDayAppointments(date);
-            const isToday = date.toDateString() === new Date().toDateString();
+        {/* Calendar Grid */}
+        {viewMode === 'week' ? (
+          /* Week View */
+          <div className="grid grid-cols-7 gap-4">
+            {Array.from({ length: 7 }, (_, i) => {
+              const date = new Date(currentDate);
+              date.setDate(currentDate.getDate() - currentDate.getDay() + i);
+              const dayAppointments = getDayAppointments(date);
+              const isToday = date.toDateString() === new Date().toDateString();
 
-            return (
-              <div
-                key={i}
-                className={`rounded-xl border bg-white p-4 shadow-sm ${
-                  isToday ? 'border-primary-500 bg-primary-50' : 'border-gray-200'
-                }`}
-              >
-                <div className="mb-4 text-center">
-                  <p className={`text-sm font-medium ${isToday ? 'text-primary-700' : 'text-gray-500'}`}>
-                    {date.toLocaleDateString('pt-BR', { weekday: 'short' })}
-                  </p>
-                  <p className={`text-lg font-bold ${isToday ? 'text-primary-700' : 'text-gray-900'}`}>
-                    {date.getDate()}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  {dayAppointments.slice(0, 3).map((appt) => (
-                    <div
-                      key={appt.id}
-                      onClick={() => handleAppointmentClick(appt)}
-                      className={`cursor-pointer rounded-lg border p-2 text-xs transition-colors hover:bg-gray-50 ${getStatusColor(appt.status)}`}
-                    >
-                      <p className="font-medium truncate">{appt.client_name}</p>
-                      <p className="text-gray-600">{appt.time}</p>
-                    </div>
-                  ))}
-                  
-                  {dayAppointments.length > 3 && (
-                    <p className="text-center text-xs text-gray-500">
-                      +{dayAppointments.length - 3} mais
+              return (
+                <div
+                  key={i}
+                  className={`rounded-xl border bg-white p-4 shadow-sm ${
+                    isToday ? 'border-primary-500 bg-primary-50' : 'border-gray-200'
+                  }`}
+                >
+                  <div className="mb-4 text-center">
+                    <p className={`text-sm font-medium ${isToday ? 'text-primary-700' : 'text-gray-500'}`}>
+                      {date.toLocaleDateString('pt-BR', { weekday: 'short' })}
                     </p>
-                  )}
+                    <p className={`text-lg font-bold ${isToday ? 'text-primary-700' : 'text-gray-900'}`}>
+                      {date.getDate()}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {dayAppointments.slice(0, 3).map((appt) => (
+                      <div
+                        key={appt.id}
+                        onClick={() => handleAppointmentClick(appt)}
+                        className={`cursor-pointer rounded-lg border p-2 text-xs transition-colors hover:bg-gray-50 ${getStatusColor(appt.status)}`}
+                      >
+                        <p className="font-medium truncate">{appt.client_name}</p>
+                        <p className="text-gray-600">{appt.time}</p>
+                      </div>
+                    ))}
+                    
+                    {dayAppointments.length > 3 && (
+                      <p className="text-center text-xs text-gray-500">
+                        +{dayAppointments.length - 3} mais
+                      </p>
+                    )}
+                  </div>
                 </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Month View */
+          <div className="grid grid-cols-7 gap-2">
+            {/* Day headers */}
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
+              <div key={day} className="p-2 text-center text-sm font-medium text-gray-500">
+                {day}
               </div>
-            );
-          })}
-        </div>
+            ))}
+            
+            {/* Month days */}
+            {generateMonthDays().map((date, index) => {
+              const dayAppointments = getDayAppointments(date);
+              const isCurrentMonth = date.getMonth() === currentDate.getMonth();
+              const isToday = date.toDateString() === new Date().toDateString();
+
+              return (
+                <div
+                  key={index}
+                  className={`min-h-[120px] rounded-lg border bg-white p-2 shadow-sm ${
+                    isToday ? 'border-primary-500 bg-primary-50' : 'border-gray-200'
+                  } ${!isCurrentMonth ? 'bg-gray-50' : ''}`}
+                >
+                  <div className={`mb-2 text-right text-sm font-medium ${
+                    isToday ? 'text-primary-700' : isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
+                  }`}>
+                    {date.getDate()}
+                  </div>
+
+                  <div className="space-y-1">
+                    {dayAppointments.slice(0, 2).map((appt) => (
+                      <div
+                        key={appt.id}
+                        onClick={() => handleAppointmentClick(appt)}
+                        className={`cursor-pointer rounded border p-1 text-xs transition-colors hover:bg-gray-50 ${getStatusColor(appt.status)}`}
+                      >
+                        <p className="font-medium truncate text-xs">{appt.client_name}</p>
+                        <p className="text-gray-600 text-xs">{appt.time}</p>
+                      </div>
+                    ))}
+                    
+                    {dayAppointments.length > 2 && (
+                      <p className="text-center text-xs text-gray-500">
+                        +{dayAppointments.length - 2}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Modal */}
         {isModalOpen && (
