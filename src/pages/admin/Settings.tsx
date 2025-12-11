@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
-import { Save, Loader2 } from "lucide-react";
+import { Save, Loader2, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
 
 // Types
 interface FormData {
@@ -34,6 +34,8 @@ interface FormData {
 // Custom Hook for Settings State
 const useSettingsState = (currentBusiness: any) => {
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [formData, setFormData] = useState<FormData>({
     name: "",
     description: "",
@@ -83,7 +85,7 @@ const useSettingsState = (currentBusiness: any) => {
         facebook: currentBusiness.social_media?.facebook || "",
         website: currentBusiness.social_media?.website || "",
         photos: currentBusiness.photos || [],
-        payment_methods: currentBusiness.payment_methods || [],
+        payment_methods: Array.isArray(currentBusiness.payment_methods) ? currentBusiness.payment_methods : [],
         working_hours: currentBusiness.working_hours || [
           { day: "Segunda", intervals: [{ start: "09:00", end: "18:00" }], active: true },
           { day: "Terça", intervals: [{ start: "09:00", end: "18:00" }], active: true },
@@ -94,6 +96,7 @@ const useSettingsState = (currentBusiness: any) => {
           { day: "Domingo", intervals: [], active: false },
         ]
       });
+      setLoading(false);
     }
   }, [currentBusiness]);
 
@@ -101,7 +104,7 @@ const useSettingsState = (currentBusiness: any) => {
     setFormData(prev => ({ ...prev, ...updates }));
   };
 
-  return { formData, updateFormData, saving, setSaving };
+  return { formData, updateFormData, saving, setSaving, loading, saveStatus, setSaveStatus };
 };
 
 // Reusable Input Component
@@ -113,7 +116,8 @@ const FormInput: React.FC<{
   placeholder?: string;
   required?: boolean;
   rows?: number;
-}> = ({ label, type = "text", value, onChange, placeholder, required, rows }) => (
+  disabled?: boolean;
+}> = ({ label, type = "text", value, onChange, placeholder, required, rows, disabled }) => (
   <div>
     <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
     {rows ? (
@@ -123,7 +127,8 @@ const FormInput: React.FC<{
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         required={required}
-        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+        disabled={disabled}
+        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
       />
     ) : (
       <input
@@ -132,7 +137,8 @@ const FormInput: React.FC<{
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         required={required}
-        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+        disabled={disabled}
+        className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
       />
     )}
   </div>
@@ -142,7 +148,8 @@ const FormInput: React.FC<{
 const BusinessInfoSection: React.FC<{
   formData: FormData;
   updateFormData: (updates: Partial<FormData>) => void;
-}> = ({ formData, updateFormData }) => (
+  disabled?: boolean;
+}> = ({ formData, updateFormData, disabled }) => (
   <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
     <h2 className="mb-4 text-lg font-bold text-gray-900 flex items-center gap-2">
       <div className="w-5 h-5 bg-blue-100 rounded flex items-center justify-center">
@@ -159,6 +166,7 @@ const BusinessInfoSection: React.FC<{
         label="Nome do Negócio"
         value={formData.name}
         onChange={(value) => updateFormData({ name: value })}
+        disabled={disabled}
       />
 
       <FormInput
@@ -166,6 +174,7 @@ const BusinessInfoSection: React.FC<{
         type="tel"
         value={formData.phone}
         onChange={(value) => updateFormData({ phone: value })}
+        disabled={disabled}
       />
 
       <FormInput
@@ -173,6 +182,7 @@ const BusinessInfoSection: React.FC<{
         type="tel"
         value={formData.secondary_phone}
         onChange={(value) => updateFormData({ secondary_phone: value })}
+        disabled={disabled}
       />
 
       <div className="md:col-span-2">
@@ -182,6 +192,7 @@ const BusinessInfoSection: React.FC<{
           onChange={(value) => updateFormData({ description: value })}
           placeholder="Descreva seu negócio, serviços oferecidos, etc."
           rows={4}
+          disabled={disabled}
         />
       </div>
     </div>
@@ -192,7 +203,8 @@ const BusinessInfoSection: React.FC<{
 const AddressSection: React.FC<{
   formData: FormData;
   updateFormData: (updates: Partial<FormData>) => void;
-}> = ({ formData, updateFormData }) => (
+  disabled?: boolean;
+}> = ({ formData, updateFormData, disabled }) => (
   <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
     <h2 className="mb-4 text-lg font-bold text-gray-900 flex items-center gap-2">
       <div className="w-5 h-5 bg-green-100 rounded flex items-center justify-center">
@@ -210,6 +222,7 @@ const AddressSection: React.FC<{
         value={formData.cep}
         onChange={(value) => updateFormData({ cep: value })}
         placeholder="87080700"
+        disabled={disabled}
       />
 
       <div className="md:col-span-2">
@@ -218,6 +231,7 @@ const AddressSection: React.FC<{
           value={formData.rua}
           onChange={(value) => updateFormData({ rua: value })}
           placeholder="Rua pequi"
+          disabled={disabled}
         />
       </div>
 
@@ -226,6 +240,7 @@ const AddressSection: React.FC<{
         value={formData.numero}
         onChange={(value) => updateFormData({ numero: value })}
         placeholder="602"
+        disabled={disabled}
       />
 
       <FormInput
@@ -233,6 +248,7 @@ const AddressSection: React.FC<{
         value={formData.complemento}
         onChange={(value) => updateFormData({ complemento: value })}
         placeholder="Esquina"
+        disabled={disabled}
       />
 
       <FormInput
@@ -240,6 +256,7 @@ const AddressSection: React.FC<{
         value={formData.bairro}
         onChange={(value) => updateFormData({ bairro: value })}
         placeholder="Jd tropical"
+        disabled={disabled}
       />
 
       <FormInput
@@ -247,6 +264,7 @@ const AddressSection: React.FC<{
         value={formData.cidade}
         onChange={(value) => updateFormData({ cidade: value })}
         placeholder="Maringá"
+        disabled={disabled}
       />
 
       <div>
@@ -256,7 +274,8 @@ const AddressSection: React.FC<{
         <select
           value={formData.estado}
           onChange={(e) => updateFormData({ estado: e.target.value })}
-          className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+          disabled={disabled}
+          className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
         >
           <option value="">Selecione</option>
           <option value="AC">AC</option>
@@ -296,7 +315,8 @@ const AddressSection: React.FC<{
 const SocialMediaSection: React.FC<{
   formData: FormData;
   updateFormData: (updates: Partial<FormData>) => void;
-}> = ({ formData, updateFormData }) => (
+  disabled?: boolean;
+}> = ({ formData, updateFormData, disabled }) => (
   <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
     <h2 className="mb-4 text-lg font-bold text-gray-900 flex items-center gap-2">
       <div className="w-5 h-5 bg-purple-100 rounded flex items-center justify-center">
@@ -315,6 +335,7 @@ const SocialMediaSection: React.FC<{
         value={formData.instagram}
         onChange={(value) => updateFormData({ instagram: value })}
         placeholder="https://instagram.com/seu_perfil"
+        disabled={disabled}
       />
 
       <FormInput
@@ -323,6 +344,7 @@ const SocialMediaSection: React.FC<{
         value={formData.facebook}
         onChange={(value) => updateFormData({ facebook: value })}
         placeholder="https://facebook.com/seu_perfil"
+        disabled={disabled}
       />
 
       <FormInput
@@ -331,6 +353,7 @@ const SocialMediaSection: React.FC<{
         value={formData.website}
         onChange={(value) => updateFormData({ website: value })}
         placeholder="https://seusite.com"
+        disabled={disabled}
       />
     </div>
   </div>
@@ -341,11 +364,15 @@ const PhotoGallerySection: React.FC<{
   formData: FormData;
   updateFormData: (updates: Partial<FormData>) => void;
   uploadBusinessPhoto: (file: File) => Promise<string>;
-}> = ({ formData, updateFormData, uploadBusinessPhoto }) => {
+  disabled?: boolean;
+}> = ({ formData, updateFormData, uploadBusinessPhoto, disabled }) => {
+  const [uploading, setUploading] = useState(false);
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
+    if (!e.target.files || e.target.files.length === 0 || disabled) return;
 
     try {
+      setUploading(true);
       const file = e.target.files[0];
       const url = await uploadBusinessPhoto(file);
       updateFormData({
@@ -354,10 +381,13 @@ const PhotoGallerySection: React.FC<{
     } catch (error) {
       console.error("Error uploading photo:", error);
       alert("Erro ao fazer upload da foto.");
+    } finally {
+      setUploading(false);
     }
   };
 
   const removePhoto = (index: number) => {
+    if (disabled) return;
     updateFormData({
       photos: formData.photos.filter((_, i) => i !== index)
     });
@@ -383,25 +413,34 @@ const PhotoGallerySection: React.FC<{
               alt={`Foto ${index + 1}`}
               className="w-full h-32 object-cover rounded-lg border border-gray-200"
             />
-            <button
-              onClick={() => removePhoto(index)}
-              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <span className="text-xs">×</span>
-            </button>
+            {!disabled && (
+              <button
+                onClick={() => removePhoto(index)}
+                className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+              >
+                <span className="text-xs">×</span>
+              </button>
+            )}
           </div>
         ))}
 
-        {formData.photos.length < 6 && (
-          <div className="border-2 border-dashed border-gray-300 rounded-lg h-32 flex items-center justify-center">
+        {!disabled && formData.photos.length < 6 && (
+          <div className="border-2 border-dashed border-gray-300 rounded-lg h-32 flex items-center justify-center hover:border-primary-400 transition-colors">
             <label className="cursor-pointer flex flex-col items-center">
-              <span className="text-2xl mb-2">+</span>
-              <span className="text-sm text-gray-500">Adicionar</span>
+              {uploading ? (
+                <Loader2 className="h-8 w-8 animate-spin text-primary-600 mb-2" />
+              ) : (
+                <span className="text-2xl mb-2">+</span>
+              )}
+              <span className="text-sm text-gray-500">
+                {uploading ? "Enviando..." : "Adicionar"}
+              </span>
               <input
                 type="file"
                 accept="image/*"
                 onChange={handlePhotoUpload}
                 className="hidden"
+                disabled={uploading}
               />
             </label>
           </div>
@@ -415,21 +454,25 @@ const PhotoGallerySection: React.FC<{
 const PaymentMethodsSection: React.FC<{
   formData: FormData;
   updateFormData: (updates: Partial<FormData>) => void;
-}> = ({ formData, updateFormData }) => {
+  disabled?: boolean;
+}> = ({ formData, updateFormData, disabled }) => {
   const togglePaymentMethod = (method: string) => {
-    const currentMethods = formData.payment_methods || [];
+    if (disabled) return;
+    
+    const currentMethods = Array.isArray(formData.payment_methods) ? formData.payment_methods : [];
     const newMethods = currentMethods.includes(method)
       ? currentMethods.filter(m => m !== method)
       : [...currentMethods, method];
+    
     updateFormData({ payment_methods: newMethods });
   };
 
   const paymentOptions = [
-    { key: "Dinheiro", icon: "💵" },
-    { key: "Cartão de Crédito", icon: "💳" },
-    { key: "Cartão de Débito", icon: "💳" },
-    { key: "PIX", icon: "📱" },
-    { key: "Vale Refeição", icon: "🎫" }
+    { key: "Dinheiro", icon: "💵", description: "Pagamento em espécie" },
+    { key: "Cartão de Crédito", icon: "💳", description: "Visa, Mastercard, etc." },
+    { key: "Cartão de Débito", icon: "💳", description: "Débito automático" },
+    { key: "PIX", icon: "📱", description: "Transferência instantânea" },
+    { key: "Vale Refeição", icon: "🎫", description: "Ticket refeição/alimentação" }
   ];
 
   return (
@@ -441,29 +484,62 @@ const PaymentMethodsSection: React.FC<{
         Formas de Pagamento Aceitas
       </h2>
       <p className="text-sm text-gray-500 mb-6">
-        Selecione as formas de pagamento que seu negócio aceita.
+        Selecione as formas de pagamento que seu negócio aceita. As alterações são salvas automaticamente.
       </p>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {paymentOptions.map(({ key, icon }) => (
-          <label
-            key={key}
-            className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
-              formData.payment_methods?.includes(key)
-                ? "border-primary-500 bg-primary-50 text-primary-700"
-                : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100"
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={formData.payment_methods?.includes(key) || false}
-              onChange={() => togglePaymentMethod(key)}
-              className="sr-only"
-            />
-            <span className="text-lg">{icon}</span>
-            <span className="font-medium">{key}</span>
-          </label>
-        ))}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {paymentOptions.map(({ key, icon, description }) => {
+          const isSelected = Array.isArray(formData.payment_methods) && formData.payment_methods.includes(key);
+          
+          return (
+            <button
+              key={key}
+              onClick={() => togglePaymentMethod(key)}
+              disabled={disabled}
+              className={`flex items-center gap-4 p-4 rounded-lg border transition-all duration-200 ${
+                isSelected
+                  ? "border-primary-500 bg-primary-50 text-primary-700 shadow-sm"
+                  : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:border-gray-300"
+              } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            >
+              <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center text-2xl ${
+                isSelected ? 'bg-primary-100' : 'bg-white'
+              }`}>
+                {icon}
+              </div>
+              <div className="flex-1 text-left">
+                <div className="font-semibold text-sm">{key}</div>
+                <div className="text-xs text-gray-500 mt-1">{description}</div>
+              </div>
+              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                isSelected 
+                  ? 'border-primary-500 bg-primary-500' 
+                  : 'border-gray-300 bg-white'
+              }`}>
+                {isSelected && <CheckCircle className="w-4 h-4 text-white" />}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Summary */}
+      <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <span className="font-medium">Selecionadas:</span>
+          <span className="text-primary-600 font-semibold">
+            {Array.isArray(formData.payment_methods) ? formData.payment_methods.length : 0} de {paymentOptions.length}
+          </span>
+        </div>
+        {Array.isArray(formData.payment_methods) && formData.payment_methods.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {formData.payment_methods.map(method => (
+              <span key={method} className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-primary-100 text-primary-700">
+                {paymentOptions.find(opt => opt.key === method)?.icon} {method}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -473,8 +549,11 @@ const PaymentMethodsSection: React.FC<{
 const WorkingHoursSection: React.FC<{
   formData: FormData;
   updateFormData: (updates: Partial<FormData>) => void;
-}> = ({ formData, updateFormData }) => {
+  disabled?: boolean;
+}> = ({ formData, updateFormData, disabled }) => {
   const updateWorkingHour = (dayIndex: number, field: 'active' | 'start' | 'end', value: string | boolean) => {
+    if (disabled) return;
+    
     const newHours = [...formData.working_hours];
     if (field === 'active') {
       newHours[dayIndex].active = value as boolean;
@@ -507,7 +586,8 @@ const WorkingHoursSection: React.FC<{
                 type="checkbox"
                 checked={day.active}
                 onChange={(e) => updateWorkingHour(index, 'active', e.target.checked)}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                disabled={disabled}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
               />
               <span className="font-medium text-gray-900 w-20">{day.day}</span>
             </label>
@@ -518,14 +598,16 @@ const WorkingHoursSection: React.FC<{
                   type="time"
                   value={day.intervals[0]?.start || "09:00"}
                   onChange={(e) => updateWorkingHour(index, 'start', e.target.value)}
-                  className="rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                  disabled={disabled}
+                  className="rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:bg-gray-100"
                 />
                 <span className="text-gray-500">até</span>
                 <input
                   type="time"
                   value={day.intervals[0]?.end || "18:00"}
                   onChange={(e) => updateWorkingHour(index, 'end', e.target.value)}
-                  className="rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+                  disabled={disabled}
+                  className="rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:bg-gray-100"
                 />
               </div>
             )}
@@ -540,7 +622,8 @@ const WorkingHoursSection: React.FC<{
 const RemindersSection: React.FC<{
   currentBusiness: any;
   updateBusiness: (updates: any) => Promise<void>;
-}> = ({ currentBusiness, updateBusiness }) => (
+  disabled?: boolean;
+}> = ({ currentBusiness, updateBusiness, disabled }) => (
   <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
     <h2 className="mb-4 text-lg font-bold text-gray-900 flex items-center gap-2">
       <div className="w-5 h-5 bg-yellow-100 rounded flex items-center justify-center">
@@ -571,13 +654,15 @@ const RemindersSection: React.FC<{
             type="checkbox"
             checked={currentBusiness?.reminder_config?.same_day_enabled ?? true}
             onChange={(e) => {
+              if (disabled) return;
               const newConfig = {
                 ...currentBusiness?.reminder_config,
                 same_day_enabled: e.target.checked
               };
               updateBusiness({ reminder_config: newConfig });
             }}
-            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            disabled={disabled}
+            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
           />
           <span className="text-sm text-gray-700">Ativar</span>
         </label>
@@ -591,13 +676,15 @@ const RemindersSection: React.FC<{
           <select
             value={currentBusiness?.reminder_config?.same_day_hours_before ?? 2}
             onChange={(e) => {
+              if (disabled) return;
               const newConfig = {
                 ...currentBusiness?.reminder_config,
                 same_day_hours_before: parseInt(e.target.value)
               };
               updateBusiness({ reminder_config: newConfig });
             }}
-            className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+            disabled={disabled}
+            className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:bg-gray-100"
           >
             <option value={1}>1 hora antes</option>
             <option value={2}>2 horas antes</option>
@@ -627,13 +714,15 @@ const RemindersSection: React.FC<{
             type="checkbox"
             checked={currentBusiness?.reminder_config?.previous_day_enabled ?? true}
             onChange={(e) => {
+              if (disabled) return;
               const newConfig = {
                 ...currentBusiness?.reminder_config,
                 previous_day_enabled: e.target.checked
               };
               updateBusiness({ reminder_config: newConfig });
             }}
-            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            disabled={disabled}
+            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:opacity-50"
           />
           <span className="text-sm text-gray-700">Ativar</span>
         </label>
@@ -649,13 +738,15 @@ const RemindersSection: React.FC<{
               type="time"
               value={currentBusiness?.reminder_config?.early_threshold_hour ?? "09:00"}
               onChange={(e) => {
+                if (disabled) return;
                 const newConfig = {
                   ...currentBusiness?.reminder_config,
                   early_threshold_hour: e.target.value
                 };
                 updateBusiness({ reminder_config: newConfig });
               }}
-              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+              disabled={disabled}
+              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:bg-gray-100"
             />
             <p className="text-xs text-gray-500 mt-1">
               Agendamentos antes deste horário serão considerados "muito cedo"
@@ -670,13 +761,15 @@ const RemindersSection: React.FC<{
               type="time"
               value={currentBusiness?.reminder_config?.previous_day_time ?? "19:00"}
               onChange={(e) => {
+                if (disabled) return;
                 const newConfig = {
                   ...currentBusiness?.reminder_config,
                   previous_day_time: e.target.value
                 };
                 updateBusiness({ reminder_config: newConfig });
               }}
-              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+              disabled={disabled}
+              className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 disabled:bg-gray-100"
             />
             <p className="text-xs text-gray-500 mt-1">
               Horário aproximado para enviar lembretes no dia anterior
@@ -691,12 +784,14 @@ const RemindersSection: React.FC<{
 // Main Settings Component
 const Settings: React.FC = () => {
   const { currentBusiness, updateBusiness, uploadBusinessPhoto } = useApp();
-  const { formData, updateFormData, saving, setSaving } = useSettingsState(currentBusiness);
+  const { formData, updateFormData, saving, setSaving, loading, saveStatus, setSaveStatus } = useSettingsState(currentBusiness);
 
   const handleSave = async () => {
     if (!currentBusiness?.id) return;
 
     setSaving(true);
+    setSaveStatus('saving');
+    
     try {
       const payload = {
         name: formData.name,
@@ -724,19 +819,28 @@ const Settings: React.FC = () => {
       };
 
       await updateBusiness(payload);
-      alert("Configurações salvas com sucesso!");
+      setSaveStatus('success');
+      
+      // Reset success status after 3 seconds
+      setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (error) {
       console.error("Error saving settings:", error);
-      alert("Erro ao salvar configurações.");
+      setSaveStatus('error');
+      alert("Erro ao salvar configurações. Tente novamente.");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleRefresh = () => {
+    window.location.reload();
   };
 
   if (!currentBusiness) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="text-center">
+          <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary-600 mb-4" />
           <p className="text-gray-500">Carregando configurações...</p>
         </div>
       </div>
@@ -752,28 +856,93 @@ const Settings: React.FC = () => {
             <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
             <p className="text-gray-500">Personalize as configurações do seu negócio</p>
           </div>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 disabled:opacity-70"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Salvar Alterações
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleRefresh}
+              className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Atualizar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 disabled:opacity-70"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {saving ? "Salvando..." : "Salvar Alterações"}
+            </button>
+          </div>
         </div>
 
+        {/* Status Messages */}
+        {saveStatus === 'success' && (
+          <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4 flex items-center gap-3">
+            <CheckCircle className="h-5 w-5 text-green-600" />
+            <div>
+              <p className="text-sm font-medium text-green-800">Configurações salvas com sucesso!</p>
+              <p className="text-xs text-green-600">As alterações foram aplicadas ao seu negócio.</p>
+            </div>
+          </div>
+        )}
+
+        {saveStatus === 'error' && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600" />
+            <div>
+              <p className="text-sm font-medium text-red-800">Erro ao salvar configurações</p>
+              <p className="text-xs text-red-600">Verifique sua conexão e tente novamente.</p>
+            </div>
+          </div>
+        )}
+
+        {loading && (
+          <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+            <div>
+              <p className="text-sm font-medium text-blue-800">Carregando configurações...</p>
+              <p className="text-xs text-blue-600">Aguarde enquanto sincronizamos seus dados.</p>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-8">
-          <BusinessInfoSection formData={formData} updateFormData={updateFormData} />
-          <AddressSection formData={formData} updateFormData={updateFormData} />
-          <SocialMediaSection formData={formData} updateFormData={updateFormData} />
+          <BusinessInfoSection 
+            formData={formData} 
+            updateFormData={updateFormData} 
+            disabled={saving || loading} 
+          />
+          <AddressSection 
+            formData={formData} 
+            updateFormData={updateFormData} 
+            disabled={saving || loading} 
+          />
+          <SocialMediaSection 
+            formData={formData} 
+            updateFormData={updateFormData} 
+            disabled={saving || loading} 
+          />
           <PhotoGallerySection
             formData={formData}
             updateFormData={updateFormData}
             uploadBusinessPhoto={uploadBusinessPhoto}
+            disabled={saving || loading}
           />
-          <PaymentMethodsSection formData={formData} updateFormData={updateFormData} />
-          <WorkingHoursSection formData={formData} updateFormData={updateFormData} />
-          <RemindersSection currentBusiness={currentBusiness} updateBusiness={updateBusiness} />
+          <PaymentMethodsSection 
+            formData={formData} 
+            updateFormData={updateFormData} 
+            disabled={saving || loading} 
+          />
+          <WorkingHoursSection 
+            formData={formData} 
+            updateFormData={updateFormData} 
+            disabled={saving || loading} 
+          />
+          <RemindersSection 
+            currentBusiness={currentBusiness} 
+            updateBusiness={updateBusiness} 
+            disabled={saving || loading} 
+          />
         </div>
       </main>
     </div>
