@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
 import { Save, Loader2 } from "lucide-react";
@@ -35,24 +35,24 @@ interface FormData {
 const useSettingsState = (currentBusiness: any) => {
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<FormData>({
-    name: currentBusiness?.name || "",
-    description: currentBusiness?.description || "",
-    phone: currentBusiness?.phone || "",
-    secondary_phone: currentBusiness?.secondary_phone || "",
-    address: currentBusiness?.address || "",
-    cep: currentBusiness?.address_details?.cep || "",
-    rua: currentBusiness?.address_details?.rua || "",
-    numero: currentBusiness?.address_details?.numero || "",
-    complemento: currentBusiness?.address_details?.complemento || "",
-    bairro: currentBusiness?.address_details?.bairro || "",
-    cidade: currentBusiness?.address_details?.cidade || "",
-    estado: currentBusiness?.address_details?.estado || "",
-    instagram: currentBusiness?.social_media?.instagram || "",
-    facebook: currentBusiness?.social_media?.facebook || "",
-    website: currentBusiness?.social_media?.website || "",
-    photos: currentBusiness?.photos || [],
-    payment_methods: currentBusiness?.payment_methods || [],
-    working_hours: currentBusiness?.working_hours || [
+    name: "",
+    description: "",
+    phone: "",
+    secondary_phone: "",
+    address: "",
+    cep: "",
+    rua: "",
+    numero: "",
+    complemento: "",
+    bairro: "",
+    cidade: "",
+    estado: "",
+    instagram: "",
+    facebook: "",
+    website: "",
+    photos: [],
+    payment_methods: [],
+    working_hours: [
       { day: "Segunda", intervals: [{ start: "09:00", end: "18:00" }], active: true },
       { day: "Terça", intervals: [{ start: "09:00", end: "18:00" }], active: true },
       { day: "Quarta", intervals: [{ start: "09:00", end: "18:00" }], active: true },
@@ -62,6 +62,40 @@ const useSettingsState = (currentBusiness: any) => {
       { day: "Domingo", intervals: [], active: false },
     ]
   });
+
+  // Load data when currentBusiness changes
+  useEffect(() => {
+    if (currentBusiness) {
+      setFormData({
+        name: currentBusiness.name || "",
+        description: currentBusiness.description || "",
+        phone: currentBusiness.phone || "",
+        secondary_phone: currentBusiness.secondary_phone || "",
+        address: currentBusiness.address || "",
+        cep: currentBusiness.address_details?.cep || "",
+        rua: currentBusiness.address_details?.rua || "",
+        numero: currentBusiness.address_details?.numero || "",
+        complemento: currentBusiness.address_details?.complemento || "",
+        bairro: currentBusiness.address_details?.bairro || "",
+        cidade: currentBusiness.address_details?.cidade || "",
+        estado: currentBusiness.address_details?.estado || "",
+        instagram: currentBusiness.social_media?.instagram || "",
+        facebook: currentBusiness.social_media?.facebook || "",
+        website: currentBusiness.social_media?.website || "",
+        photos: currentBusiness.photos || [],
+        payment_methods: currentBusiness.payment_methods || [],
+        working_hours: currentBusiness.working_hours || [
+          { day: "Segunda", intervals: [{ start: "09:00", end: "18:00" }], active: true },
+          { day: "Terça", intervals: [{ start: "09:00", end: "18:00" }], active: true },
+          { day: "Quarta", intervals: [{ start: "09:00", end: "18:00" }], active: true },
+          { day: "Quinta", intervals: [{ start: "09:00", end: "18:00" }], active: true },
+          { day: "Sexta", intervals: [{ start: "09:00", end: "18:00" }], active: true },
+          { day: "Sábado", intervals: [{ start: "09:00", end: "18:00" }], active: true },
+          { day: "Domingo", intervals: [], active: false },
+        ]
+      });
+    }
+  }, [currentBusiness]);
 
   const updateFormData = (updates: Partial<FormData>) => {
     setFormData(prev => ({ ...prev, ...updates }));
@@ -383,11 +417,11 @@ const PaymentMethodsSection: React.FC<{
   updateFormData: (updates: Partial<FormData>) => void;
 }> = ({ formData, updateFormData }) => {
   const togglePaymentMethod = (method: string) => {
-    updateFormData({
-      payment_methods: formData.payment_methods.includes(method)
-        ? formData.payment_methods.filter(m => m !== method)
-        : [...formData.payment_methods, method]
-    });
+    const currentMethods = formData.payment_methods || [];
+    const newMethods = currentMethods.includes(method)
+      ? currentMethods.filter(m => m !== method)
+      : [...currentMethods, method];
+    updateFormData({ payment_methods: newMethods });
   };
 
   const paymentOptions = [
@@ -415,14 +449,14 @@ const PaymentMethodsSection: React.FC<{
           <label
             key={key}
             className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
-              formData.payment_methods.includes(key)
+              formData.payment_methods?.includes(key)
                 ? "border-primary-500 bg-primary-50 text-primary-700"
                 : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100"
             }`}
           >
             <input
               type="checkbox"
-              checked={formData.payment_methods.includes(key)}
+              checked={formData.payment_methods?.includes(key) || false}
               onChange={() => togglePaymentMethod(key)}
               className="sr-only"
             />
