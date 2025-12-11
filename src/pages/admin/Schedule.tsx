@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
-import { Clock, Calendar as CalendarIcon, X, Save, ChevronLeft, ChevronRight, CheckCircle, DollarSign, Send, Loader2 } from "lucide-react";
+import { Clock, Calendar as CalendarIcon, X, Save, ChevronLeft, ChevronRight, CheckCircle, DollarSign, Send, Loader2, Filter } from "lucide-react";
 import { Appointment, AppointmentStatus } from "../../types";
 
 type ViewType = "day" | "week" | "month";
@@ -29,6 +29,13 @@ const Schedule: React.FC = () => {
   const [newTime, setNewTime] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Dinheiro");
   const [paymentAmount, setPaymentAmount] = useState<number | string>("");
+
+  // Filter States
+  const [statusFilter, setStatusFilter] = useState<AppointmentStatus | 'all'>('all');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // UI State
+  const [copiedPhone, setCopiedPhone] = useState(false);
 
   const timeSlots = Array.from({ length: 11 }, (_, i) => i + 9); // 9am to 7pm
 
@@ -103,11 +110,24 @@ const Schedule: React.FC = () => {
     setCurrentDate(newDate);
   };
 
-  const getAppointmentsForDate = (dateStr: string) => appointments.filter(a => a.date === dateStr);
+  const getAppointmentsForDate = (dateStr: string) => {
+    let filtered = appointments.filter(a => a.date === dateStr);
+    
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(a => a.status === statusFilter);
+    } else {
+      // Default: hide cancelled appointments
+      filtered = filtered.filter(a => a.status !== AppointmentStatus.CANCELLED);
+    }
+    
+    return filtered;
+  };
+
   const getAppointmentsForHour = (dateStr: string, hour: number) => {
-    return appointments.filter((appt) => {
+    return getAppointmentsForDate(dateStr).filter((appt) => {
       const apptHour = parseInt(appt.time.split(":")[0]);
-      return appt.date === dateStr && apptHour === hour;
+      return apptHour === hour;
     });
   };
 
@@ -311,6 +331,32 @@ const Schedule: React.FC = () => {
             {sendingReminders ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
             Enviar Lembretes Hoje
         </button>
+
+        {/* Filters */}
+        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Filter className="h-5 w-5 text-gray-400" />
+              <span className="text-sm font-medium text-gray-700">Filtros:</span>
+              <div className="flex gap-2">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as AppointmentStatus | 'all')}
+                  className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-1 text-sm text-gray-900 focus:border-primary-500 focus:ring-primary-500"
+                >
+                  <option value="all">Todos os Status</option>
+                  <option value={AppointmentStatus.PENDING}>Pendente</option>
+                  <option value={AppointmentStatus.CONFIRMED}>Confirmado</option>
+                  <option value={AppointmentStatus.COMPLETED}>Concluído</option>
+                  <option value={AppointmentStatus.CANCELLED}>Cancelado</option>
+                </select>
+              </div>
+            </div>
+            <div className="text-sm text-gray-500">
+              {statusFilter === 'all' ? 'Mostrando todos' : `Filtrando: ${statusFilter}`}
+            </div>
+          </div>
+        </div>
 
         {view === 'day' && <DayView />}
         {view === 'month' && <MonthView />}
