@@ -6,6 +6,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Função para obter a data/hora atual em um fuso horário específico
+const getNowInTimezone = (tz: string) => {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -15,130 +20,102 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // Get current time and time 2 hours from now
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    
-    // Buscar agendamentos que podem precisar de lembretes hoje
-    const { data: appointments, error } = await supabaseAdmin
-      .from('appointments')
-      .select(`
-        id,
-        client_name,
-        client_phone,
-        time,
-        status,
-        date,
-        businesses!inner (
-          id,
-          name, 
-          evolution_api_config, 
-          automatic_reminders,
-          reminder_config
-        ),
-        services (name),
-        professionals (name)
-      `)
-      .eq('date', today)
-      .eq('reminder_sent', false)
-      .neq('status', 'Cancelado')
-      .neq('status', 'Concluído')
-      .eq('businesses.automatic_reminders', true);
+    // 1. Buscar todos os negócios com lembretes automáticos ativados
+    const { data: businesses, error: bError } = await supabaseAdmin
+      .from('businesses')
+      .select('id, name, evolution_api_config, reminder_config, timezone')
+      .eq('automatic_reminders', true)
+      .neq('evolution_api_config', null);
 
-    if (error) throw error;
+    if (bError) throw bError;
 
     const results = [];
 
-    for (const appt of appointments || []) {
-      const config = appt.businesses?.evolution_api_config;
-      const reminderConfig = appt.businesses?.reminder_config || {
-        same_day_enabled: true,
-        previous_day_time: "19:00",
-        early_threshold_hour: "09:00",
-        previous_day_enabled: true,
-        same_day_hours_before: 2
-      };
+    for (const business of businesses || []) {
+      const businessTimezone = business.timezone || 'America/Sao_Paulo';
+      const nowInTz = getNowInTimezone(businessTimezone);
+      const todayInTz = nowInTz.toISOString().split('T')[0];
+      const tomorrowInTz = new Date(nowInTz.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      if (!config || !config.serverUrl || !config.apiKey || !config.instanceName || !appt.client_phone) {
-        results.push({ id: appt.id, status: 'skipped', reason: 'no_config_or_phone' });
+      // 2. Buscar agendamentos relevantes para este negócio (hoje e amanhã)
+      const { data: appointments, error: aError } = await supabaseAdmin
+        .from('appointments')
+        .select('id, client_name, client_phone, date, time, services(name), professionals(name)')
+        .eq('business_id', business.id)
+        .eq('reminder_sent', false)
+        .in('status', ['Pendente', 'Confirmado'])
+        .in('date', [todayInTz, tomorrowInTz]);
+
+      if (aError) {
+        console.error(`Error fetching appointments for business ${business.id}:`, aError);
         continue;
       }
 
-      const apptDateTime = new Date(`${appt.date}T${appt.time}:00`);
-      const apptHour = parseInt(appt.time.split(':')[0]);
-      const earlyThreshold = parseInt(reminderConfig.early_threshold_hour.split(':')[0]);
-      
-      // Determinar se deve enviar lembrete baseado na configuração
-      let shouldSendReminder = false;
-      let timeDescription = 'hoje';
-      
-      if (reminderConfig.previous_day_enabled && apptHour < earlyThreshold) {
-        // Para agendamentos muito cedo, verificar se estamos no horário correto do dia anterior
-        const [prevDayHours, prevDayMinutes] = reminderConfig.previous_day_time.split(':').map(Number);
-        const prevDayReminderTime = new Date(now);
-        prevDayReminderTime.setHours(prevDayHours, prevDayMinutes, 0, 0);
-        
-        // Verificar se estamos dentro de uma janela de 30 minutos do horário configurado
-        const timeDiff = Math.abs(now.getTime() - prevDayReminderTime.getTime());
-        const thirtyMinutes = 30 * 60 * 1000;
-        
-        if (timeDiff <= thirtyMinutes) {
-          shouldSendReminder = true;
-          timeDescription = 'amanhã';
+      for (const appt of appointments || []) {
+        const reminderConfig = business.reminder_config || {
+          same_day_enabled: true,
+          previous_day_enabled: true,
+          same_day_hours_before: 2,
+          previous_day_time: "19:00",
+          early_threshold_hour: "09:00",
+        };
+
+        const [apptYear, apptMonth, apptDay] = appt.date.split('-').map(Number);
+        const [apptHours, apptMinutes] = appt.time.split(':').map(Number);
+        const apptDateTime = new Date(Date.UTC(apptYear, apptMonth - 1, apptDay, apptHours, apptMinutes));
+
+        let shouldSend = false;
+        let timeDescription = '';
+
+        // LÓGICA 1: Lembrete do Dia Anterior
+        if (reminderConfig.previous_day_enabled && appt.date === tomorrowInTz) {
+          const [prevDayHours, prevDayMinutes] = reminderConfig.previous_day_time.split(':').map(Number);
+          const reminderTimestamp = new Date(Date.UTC(apptYear, apptMonth - 1, apptDay - 1, prevDayHours, prevDayMinutes));
+          
+          // Verifica se a hora atual está na janela de 5 minutos do cron job
+          if (nowInTz >= reminderTimestamp && nowInTz < new Date(reminderTimestamp.getTime() + 5 * 60 * 1000)) {
+            shouldSend = true;
+            timeDescription = 'amanhã';
+          }
         }
-      } else if (reminderConfig.same_day_enabled) {
-        // Para agendamentos no mesmo dia, verificar se estamos X horas antes
-        const reminderTime = new Date(apptDateTime.getTime() - reminderConfig.same_day_hours_before * 60 * 60 * 1000);
-        const timeDiff = Math.abs(now.getTime() - reminderTime.getTime());
-        const fifteenMinutes = 15 * 60 * 1000; // Janela de 15 minutos
-        
-        if (timeDiff <= fifteenMinutes) {
-          shouldSendReminder = true;
+
+        // LÓGICA 2: Lembrete do Mesmo Dia
+        if (!shouldSend && reminderConfig.same_day_enabled && appt.date === todayInTz) {
+          const reminderTimestamp = new Date(apptDateTime.getTime() - (reminderConfig.same_day_hours_before * 60 * 60 * 1000));
+          
+          // Verifica se a hora atual está na janela de 5 minutos do cron job
+          if (nowInTz >= reminderTimestamp && nowInTz < new Date(reminderTimestamp.getTime() + 5 * 60 * 1000)) {
+            shouldSend = true;
+            timeDescription = 'hoje';
+          }
         }
-      }
 
-      if (!shouldSendReminder) {
-        continue;
-      }
+        if (shouldSend) {
+          const clientFirstName = appt.client_name.split(' ')[0];
+          const time = appt.time.substring(0, 5);
+          const serviceName = appt.services?.name || 'serviço';
+          const proName = appt.professionals?.name ? ` com ${appt.professionals.name}` : '';
+          
+          const message = `🔔 Lembrete Automático\n\nOlá ${clientFirstName}! Seu horário na *${business.name}* é ${timeDescription}, às *${time}*.\n\nServiço: ${serviceName}${proName}\n\nCaso não possa comparecer, por favor nos avise.`;
 
-      const clientFirstName = appt.client_name.split(' ')[0];
-      const time = appt.time.substring(0, 5);
-      const serviceName = appt.services?.name || 'serviço';
-      const businessName = appt.businesses?.name || 'Barbearia';
-      const proName = appt.professionals?.name ? ` com ${appt.professionals.name}` : '';
-      
-      const message = `🔔 Lembrete Automático\n\nOlá ${clientFirstName}! Seu horário na *${businessName}* é ${timeDescription}, às *${time}*.\n\nServiço: ${serviceName}${proName}\n\nCaso não possa comparecer, por favor nos avise.`;
+          const apiConfig = business.evolution_api_config;
+          const normalizedUrl = apiConfig.serverUrl.replace(/\/$/, "");
+          const endpoint = `${normalizedUrl}/message/sendText/${apiConfig.instanceName}`;
+          const cleanPhone = appt.client_phone.replace(/\D/g, "");
 
-      try {
-        const normalizedUrl = config.serverUrl.replace(/\/$/, "");
-        const endpoint = `${normalizedUrl}/message/sendText/${config.instanceName}`;
-        const cleanPhone = appt.client_phone.replace(/\D/g, "");
-
-        const response = await fetch(endpoint, {
+          const response = await fetch(endpoint, {
             method: 'POST',
-            headers: { 
-                'apikey': config.apiKey, 
-                'Content-Type': 'application/json' 
-            },
-            body: JSON.stringify({
-                number: cleanPhone,
-                text: message,
-                options: { delay: 1000 }
-            })
-        });
+            headers: { 'apikey': apiConfig.apiKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ number: cleanPhone, text: message, options: { delay: 1000 } })
+          });
 
-        if (response.ok) {
-            await supabaseAdmin
-                .from('appointments')
-                .update({ reminder_sent: true })
-                .eq('id', appt.id);
-            
+          if (response.ok) {
+            await supabaseAdmin.from('appointments').update({ reminder_sent: true }).eq('id', appt.id);
             results.push({ id: appt.id, status: 'sent' });
-        } else {
-            results.push({ id: appt.id, status: 'failed' });
+          } else {
+            results.push({ id: appt.id, status: 'failed', error: await response.text() });
+          }
         }
-      } catch (e) {
-        console.error(e);
       }
     }
 
