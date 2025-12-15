@@ -18,10 +18,10 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    // 1. Buscar dados do negócio e do plano
+    // 1. Buscar dados do negócio, do plano e do dono
     const { data: business, error: businessError } = await supabaseAdmin
       .from('businesses')
-      .select('plan')
+      .select('id, plan')
       .eq('id', business_id)
       .single();
 
@@ -39,40 +39,54 @@ serve(async (req) => {
       throw new Error(`Detalhes do plano "${business.plan}" não encontrados.`);
     }
 
-    // 2. Criar cobrança na AbacatePay (simulado)
-    const abacateApiKey = Deno.env.get('ABACATEPAY_API_KEY');
+    const { data: owner, error: ownerError } = await supabaseAdmin
+        .from('users')
+        .select('name, email')
+        .eq('business_id', business_id)
+        .eq('role', 'Dono') // Assumindo que 'Dono' é a role do proprietário
+        .limit(1)
+        .single();
+
+    if (ownerError || !owner) {
+        throw new Error("Dono do negócio não encontrado para criar a cobrança.");
+    }
+
+    // 2. Criar cobrança na AbacatePay
+    // A chave de API está hardcoded para testes, conforme solicitado.
+    // Em produção, use Deno.env.get('ABACATEPAY_API_KEY') e configure o segredo no Supabase.
+    const abacateApiKey = 'abc_dev_cHnk2MfPmKabztKWSCNEys3K';
     if (!abacateApiKey) throw new Error("Chave da API AbacatePay não configurada.");
 
     const chargePayload = {
-      amount: plan.price_cents,
+      value: plan.price_cents,
+      charge_type: "one_time",
       payment_method: "pix",
       description: `Assinatura AgendaPro - Plano ${plan.name}`,
-      // customer: { ... } // Adicionar dados do cliente se necessário
+      customer: {
+        name: owner.name,
+        email: owner.email,
+      }
     };
 
-    // const abacateResponse = await fetch('https://api.abacatepay.com.br/v1/charges', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Authorization': `Bearer ${abacateApiKey}`,
-    //     'Content-Type': 'application/json'
-    //   },
-    //   body: JSON.stringify(chargePayload)
-    // });
-    // if (!abacateResponse.ok) {
-    //   const errorBody = await abacateResponse.text();
-    //   throw new Error(`Erro na AbacatePay: ${errorBody}`);
-    // }
-    // const chargeData = await abacateResponse.json();
+    // URL da API de sandbox da AbacatePay
+    const abacateApiUrl = 'https://sandbox.abacatepay.com.br/api/v1/charges';
 
-    // ** DADOS MOCKADOS PARA DESENVOLVIMENTO **
-    const chargeData = {
-        id: `chg_${crypto.randomUUID()}`,
-        status: 'pending',
-        payment_url: 'https://abacatepay.com/pagar/123',
-        pix_qr_code: `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=PIX_MOCK_${Date.now()}`,
-        pix_emv: `00020126580014br.gov.bcb.pix...${Date.now()}`
-    };
-    // ** FIM DOS DADOS MOCKADOS **
+    const abacateResponse = await fetch(abacateApiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${abacateApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(chargePayload)
+    });
+
+    if (!abacateResponse.ok) {
+      const errorBody = await abacateResponse.json();
+      console.error("Erro na AbacatePay:", errorBody);
+      throw new Error(`Erro na AbacatePay: ${errorBody.message || 'Erro desconhecido'}`);
+    }
+    
+    const chargeData = await abacateResponse.json();
 
     // 3. Salvar cobrança no banco de dados
     const { data: payment, error: paymentInsertError } = await supabaseAdmin
@@ -83,8 +97,8 @@ serve(async (req) => {
         status: chargeData.status.toUpperCase(),
         amount_cents: plan.price_cents,
         payment_url: chargeData.payment_url,
-        pix_qr_code: chargeData.pix_qr_code,
-        pix_emv: chargeData.pix_emv,
+        pix_qr_code: chargeData.payment_info?.qr_code_url,
+        pix_emv: chargeData.payment_info?.qr_code,
       })
       .select()
       .single();
