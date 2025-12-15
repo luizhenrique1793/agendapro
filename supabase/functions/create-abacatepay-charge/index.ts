@@ -31,7 +31,7 @@ serve(async (req) => {
 
     const { data: plan, error: planError } = await supabaseAdmin
       .from('plans')
-      .select('id, price_cents, name')
+      .select('id, price_cents, name, description')
       .eq('name', business.plan)
       .single();
 
@@ -51,28 +51,36 @@ serve(async (req) => {
         throw new Error("Dono do negócio não encontrado para criar a cobrança.");
     }
 
-    // 2. Criar checkout na AbacatePay
+    // 2. Criar cobrança na AbacatePay com o endpoint e payload corretos
     const abacateApiKey = 'abc_dev_cHnk2MfPmKabztKWSCNEys3K'; // Chave de sandbox
     if (!abacateApiKey) throw new Error("Chave da API AbacatePay não configurada.");
 
-    const abacateApiUrl = 'https://api.abacatepay.com.br/v1/checkouts';
+    const abacateApiUrl = 'https://api.abacatepay.com/v1/billing/create';
+    console.log(`[create-abacatepay-charge] Conectando a: ${abacateApiUrl}`);
 
-    // Adicionando log para depuração do DNS
-    console.log(`[create-abacatepay-charge] Tentando conectar a: ${abacateApiUrl}`);
-
-    const checkoutPayload = {
-      charge: {
-        amount: plan.price_cents,
-        description: `Assinatura AgendaPro - Plano ${plan.name}`,
-        customer: {
-          name: owner.name,
-          email: owner.email,
-          mobile_phone: business.phone?.replace(/\D/g, '') || '',
+    const billingPayload = {
+      frequency: "ONE_TIME",
+      methods: ["PIX", "CREDIT_CARD"],
+      products: [
+        {
+          externalId: plan.id,
+          name: `Assinatura AgendaPro - Plano ${plan.name}`,
+          description: plan.description || `Acesso ao plano ${plan.name} por 30 dias.`,
+          quantity: 1,
+          price: plan.price_cents
         }
+      ],
+      returnUrl: `${Deno.env.get('NEXT_PUBLIC_APP_URL') || 'http://localhost:3000'}/#/manager/billing?status=success`,
+      customer: {
+        name: owner.name,
+        email: owner.email,
+        cellphone: business.phone?.replace(/\D/g, '') || '',
       },
-      payment_methods: ["CREDIT_CARD", "PIX"],
-      installments: [1], // Permitir apenas pagamento à vista
-      success_url: `${Deno.env.get('NEXT_PUBLIC_APP_URL') || 'http://localhost:3000'}/#/manager/billing?status=success`,
+      externalId: `agendapro-business-${business.id}-${Date.now()}`,
+      metadata: {
+        business_id: business.id,
+        plan_name: plan.name
+      }
     };
 
     const abacateResponse = await fetch(abacateApiUrl, {
@@ -81,25 +89,25 @@ serve(async (req) => {
         'Authorization': `Bearer ${abacateApiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(checkoutPayload)
+      body: JSON.stringify(billingPayload)
     });
 
     const responseBodyText = await abacateResponse.text();
-    let chargeData;
+    let billingData;
     try {
-        chargeData = JSON.parse(responseBodyText);
+        billingData = JSON.parse(responseBodyText);
     } catch (e) {
         console.error("Failed to parse AbacatePay response:", responseBodyText);
         throw new Error(`Resposta inválida da AbacatePay: ${responseBodyText}`);
     }
 
     if (!abacateResponse.ok) {
-      console.error("Erro na AbacatePay:", chargeData);
-      throw new Error(`Erro na AbacatePay: ${chargeData.message || 'Erro desconhecido'}`);
+      console.error("Erro na AbacatePay:", billingData);
+      throw new Error(`Erro na AbacatePay: ${billingData.message || 'Erro desconhecido'}`);
     }
     
-    if (!chargeData.checkout_url) {
-        throw new Error("A resposta da AbacatePay não continha uma URL de checkout.");
+    if (!billingData.url) {
+        throw new Error("A resposta da AbacatePay não continha uma URL de pagamento.");
     }
 
     // 3. Salvar cobrança no banco de dados
@@ -107,10 +115,10 @@ serve(async (req) => {
       .from('business_payments')
       .insert({
         business_id: business_id,
-        billing_id: chargeData.id, // O checkout tem um ID
+        billing_id: billingData.id,
         status: 'PENDING',
         amount_cents: plan.price_cents,
-        payment_url: chargeData.checkout_url,
+        payment_url: billingData.url,
       })
       .select()
       .single();
@@ -123,7 +131,7 @@ serve(async (req) => {
       .update({ billing_status: 'payment_pending' })
       .eq('id', business_id);
 
-    return new Response(JSON.stringify({ success: true, payment }), {
+    return new Response(JSON.stringify({ success: true, payment: { ...payment, payment_url: billingData.url } }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
@@ -132,7 +140,7 @@ serve(async (req) => {
     console.error("Erro na função create-abacatepay-charge:", err);
     return new Response(JSON.stringify({ success: false, error: err.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200, // Retornar 200 para o frontend tratar o erro de negócio
+      status: 200,
     });
   }
 });
