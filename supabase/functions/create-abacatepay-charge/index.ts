@@ -56,7 +56,7 @@ serve(async (req) => {
     if (!abacateApiKey) throw new Error("Chave da API AbacatePay não configurada.");
 
     // URL correta da API de sandbox da AbacatePay para criar um checkout
-    const abacateApiUrl = 'https://sandbox.abacatepay.com/api/v1/billing/create';
+    const abacateApiUrl = 'https://sandbox.abacatepay.com.br/api/v1/billing/create';
 
     const checkoutPayload = {
       frequency: "ONE_TIME",
