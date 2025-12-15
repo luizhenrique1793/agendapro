@@ -85,7 +85,7 @@ serve(async (req) => {
           price: plan.price_cents
         }
       ],
-      returnUrl: `${Deno.env.get('NEXT_PUBLIC_APP_URL') || 'http://localhost:3000'}/#/manager/billing?status=success`,
+      completionUrl: `${Deno.env.get('NEXT_PUBLIC_APP_URL') || 'http://localhost:3000'}/#/manager/billing?status=success`,
       customer: customerPayload,
       externalId: `agendapro-business-${business.id}-${Date.now()}`,
       metadata: {
