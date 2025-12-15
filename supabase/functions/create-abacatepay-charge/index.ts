@@ -55,10 +55,11 @@ serve(async (req) => {
     const abacateApiKey = 'abc_dev_cHnk2MfPmKabztKWSCNEys3K'; // Chave de sandbox
     if (!abacateApiKey) throw new Error("Chave da API AbacatePay não configurada.");
 
-    // CORREÇÃO: URL da API e endpoint para criar checkout
     const abacateApiUrl = 'https://api.abacatepay.com.br/v1/checkouts';
 
-    // CORREÇÃO: Payload ajustado para o endpoint /v1/checkouts
+    // Adicionando log para depuração do DNS
+    console.log(`[create-abacatepay-charge] Tentando conectar a: ${abacateApiUrl}`);
+
     const checkoutPayload = {
       charge: {
         amount: plan.price_cents,
