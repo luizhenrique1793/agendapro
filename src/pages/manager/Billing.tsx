@@ -52,7 +52,7 @@ const Billing: React.FC = () => {
   };
 
   const isTrialActive = currentBusiness?.billing_status === 'trial' && trialDaysRemaining() > 0;
-  const isPending = currentBusiness?.billing_status === 'payment_pending';
+  const needsActivation = !isTrialActive && currentBusiness?.billing_status !== 'active';
   const hasRequested = !!currentBusiness?.activation_requested_at;
 
   if (appLoading) {
@@ -60,25 +60,25 @@ const Billing: React.FC = () => {
   }
 
   const renderStatusSpecificContent = () => {
-    if (isPending) {
+    if (needsActivation) {
       return (
         <div className="bg-white p-6 rounded-xl shadow-sm border">
           <h2 className="font-bold text-lg mb-2 flex items-center gap-2">
             <Send className="text-primary-600" /> Ativar Assinatura
           </h2>
           <p className="text-sm text-gray-600 mb-4">
-            Seu período de testes terminou. Para continuar usando o sistema, solicite a liberação manual para nossa equipe.
+            Seu período de testes terminou ou sua assinatura está pendente. Para continuar usando o sistema, solicite a liberação para nossa equipe.
           </p>
           {hasRequested ? (
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
               <CheckCircle className="mx-auto h-8 w-8 text-blue-500 mb-2" />
               <h3 className="font-semibold text-blue-800">Pedido de liberação enviado!</h3>
-              <p className="text-sm text-blue-700">Nossa equipe está analisando seu pedido. A liberação ocorrerá em breve.</p>
+              <p className="text-sm text-blue-700">Nossa equipe está analisando seu pedido e logo entrará em contato para finalizar a ativação.</p>
             </div>
           ) : (
             <button onClick={handleRequestActivation} disabled={isRequesting} className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white font-semibold py-3 rounded-lg hover:bg-primary-700 disabled:opacity-50">
               {isRequesting ? <Loader2 className="animate-spin" /> : <Send />}
-              Solicitar Liberação Manual
+              Solicitar Liberação
             </button>
           )}
           {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
@@ -96,7 +96,7 @@ const Billing: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Assinatura e Pagamento</h1>
           <p className="text-gray-500 mb-8">Gerencie seu plano e pagamentos do AgendaPro.</p>
 
-          {isPending && (
+          {needsActivation && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
               <h3 className="font-bold flex items-center gap-2"><AlertTriangle /> Conta Pendente</h3>
               <p>Sua conta está com o pagamento pendente. Solicite a liberação para continuar usando todas as funcionalidades.</p>
