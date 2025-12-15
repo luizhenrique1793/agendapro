@@ -13,6 +13,8 @@ interface AppContextType {
   loading: boolean;
   currentBusiness: Business | null;
   updateBusiness: (business: Partial<Business>) => Promise<void>;
+  adminUpdateBusiness: (business: Partial<Business>) => Promise<void>;
+  adminCreateBusiness: (businessData: Partial<Business>) => Promise<void>;
   addAppointment: (appt: Omit<Appointment, "id" | "created_at">) => Promise<void>;
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
   updateAppointmentReminderSent: (id: string, sent: boolean) => Promise<void>;
@@ -120,7 +122,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateBusiness = async (businessUpdate: Partial<Business>) => {
     if (!currentBusiness?.id) throw new Error("Negócio não identificado.");
     
-    // Tenta atualizar o negócio no Supabase
     const { error, count } = await supabase
       .from('businesses')
       .update(businessUpdate)
@@ -139,10 +140,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await fetchData();
   };
 
+  const adminUpdateBusiness = async (businessUpdate: Partial<Business>) => {
+    if (!businessUpdate.id) throw new Error("Business ID is required for update.");
+    const { error } = await supabase
+        .from('businesses')
+        .update(businessUpdate)
+        .eq('id', businessUpdate.id);
+    if (error) throw error;
+    await fetchData();
+  };
+
+  const adminCreateBusiness = async (businessData: Partial<Business>) => {
+      const slug = businessData.name?.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '') || `business-${Date.now()}`;
+      const { error } = await supabase
+          .from('businesses')
+          .insert([{ ...businessData, slug, status: businessData.status || 'Ativo' }]);
+      if (error) throw error;
+      await fetchData();
+  };
+
   const updateServiceProfessionals = async (serviceId: string, professionalIds: string[]) => {
     if (!currentBusiness?.id) return;
 
-    // 1. Delete existing
     const { error: deleteError } = await supabase
         .from('service_professionals')
         .delete()
@@ -150,7 +169,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     if (deleteError) throw deleteError;
 
-    // 2. Insert new
     if (professionalIds.length > 0) {
         const toInsert = professionalIds.map(pid => ({
             service_id: serviceId,
@@ -264,19 +282,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return data.publicUrl;
   };
 
-  // Nova função para upload de fotos do negócio
   const uploadBusinessPhoto = async (file: File): Promise<string> => {
     if (!file) throw new Error("Nenhum arquivo selecionado.");
     
-    // Podemos reutilizar o bucket de avatares ou criar um novo. 
-    // Por simplicidade, usaremos o mesmo bucket mas com prefixo 'business-photos/' se possível,
-    // ou apenas nomes únicos. Vamos usar 'business-' prefixo no nome.
     const fileExt = file.name.split('.').pop();
     const fileName = `business-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `public/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
-      .from('professional-avatars') // Reusing bucket for now
+      .from('professional-avatars')
       .upload(filePath, file, { cacheControl: '3600', upsert: false });
 
     if (uploadError) throw uploadError;
@@ -342,7 +356,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const sendDailyReminders = async () => {
     const { data, error } = await supabase.functions.invoke('send-appointment-reminders', {});
     if (error) throw error;
-    await fetchData(); // Refresh data after sending reminders
+    await fetchData();
     return data;
   };
 
@@ -359,6 +373,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentBusiness,
         logout,
         updateBusiness,
+        adminUpdateBusiness,
+        adminCreateBusiness,
         addService,
         updateService,
         deleteService,
