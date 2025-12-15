@@ -73,6 +73,8 @@ serve(async (req) => {
         customerPayload.cellphone = cleanPhone;
     }
 
+    const appUrl = Deno.env.get('NEXT_PUBLIC_APP_URL') || 'http://localhost:3000';
+
     const billingPayload = {
       frequency: "ONE_TIME",
       methods: ["PIX", "CREDIT_CARD"],
@@ -85,7 +87,8 @@ serve(async (req) => {
           price: plan.price_cents
         }
       ],
-      completionUrl: `${Deno.env.get('NEXT_PUBLIC_APP_URL') || 'http://localhost:3000'}/#/manager/billing?status=success`,
+      completionUrl: `${appUrl}/#/manager/billing?status=success`,
+      returnUrl: `${appUrl}/#/manager/billing`,
       customer: customerPayload,
       externalId: `agendapro-business-${business.id}-${Date.now()}`,
       metadata: {
