@@ -6,7 +6,8 @@ import {
   Store,
   BarChart2,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  DollarSign
 } from "lucide-react";
 import { useApp } from "../store";
 
@@ -21,6 +22,7 @@ export const AdminSidebar: React.FC = () => {
     { path: "/admin", label: "Visão Geral", icon: LayoutDashboard },
     { path: "/admin/businesses", label: "Negócios", icon: Store },
     { path: "/admin/users", label: "Usuários", icon: Users },
+    { path: "/admin/plans", label: "Planos", icon: DollarSign },
     { path: "/admin/reports", label: "Relatórios Plataforma", icon: BarChart2 },
   ];
 

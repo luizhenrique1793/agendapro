@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { Service, Professional, Appointment, Business, User, Client, ProfessionalBlock, AppointmentStatus } from "./types";
+import { Service, Professional, Appointment, Business, User, Client, ProfessionalBlock, AppointmentStatus, Plan } from "./types";
 import { supabase } from "./lib/supabase";
 import { useAuth } from "./context/AuthContext";
 
@@ -10,6 +10,7 @@ interface AppContextType {
   businesses: Business[];
   users: User[];
   clients: Client[];
+  plans: Plan[];
   loading: boolean;
   currentBusiness: Business | null;
   updateBusiness: (business: Partial<Business>) => Promise<void>;
@@ -36,6 +37,10 @@ interface AppContextType {
   removeProfessionalBlock: (id: string) => Promise<void>;
   fetchProfessionalBlocks: (professionalId: string) => Promise<ProfessionalBlock[]>;
   fetchServiceProfessionals: (serviceId: string) => Promise<string[]>;
+  fetchPlans: () => Promise<Plan[]>;
+  addPlan: (plan: Omit<Plan, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  updatePlan: (plan: Partial<Plan>) => Promise<void>;
+  deletePlan: (id: string) => Promise<void>;
   isAuthenticated: boolean;
   logout: () => void;
   googleCalendarConnected: boolean;
@@ -52,6 +57,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentBusiness, setCurrentBusiness] = useState<Business | null>(null);
 
@@ -69,6 +75,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setBusinesses([]);
       setUsers([]);
       setClients([]);
+      setPlans([]);
       setCurrentBusiness(null);
       setLoading(false);
     }
@@ -78,6 +85,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLoading(true);
     try {
       let businessId: string | null = null;
+
+      // Fetch plans for everyone
+      const { data: plansData } = await supabase.from('plans').select('*');
+      setPlans(plansData || []);
 
       if (role === 'admin') {
         const { data } = await supabase.from('businesses').select('*');
@@ -360,6 +371,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return data;
   };
 
+  // Plan Management
+  const fetchPlans = async () => {
+    const { data, error } = await supabase.from('plans').select('*');
+    if (error) throw error;
+    setPlans(data || []);
+    return data || [];
+  };
+
+  const addPlan = async (plan: Omit<Plan, 'id' | 'created_at' | 'updated_at'>) => {
+    const { error } = await supabase.from('plans').insert([plan]);
+    if (error) throw error;
+    await fetchData();
+  };
+
+  const updatePlan = async (plan: Partial<Plan>) => {
+    const { error } = await supabase.from('plans').update(plan).eq('id', plan.id!);
+    if (error) throw error;
+    await fetchData();
+  };
+
+  const deletePlan = async (id: string) => {
+    const { error } = await supabase.from('plans').delete().eq('id', id);
+    if (error) throw error;
+    await fetchData();
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -369,6 +406,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         businesses,
         users,
         clients,
+        plans,
         loading,
         currentBusiness,
         logout,
@@ -396,6 +434,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         removeProfessionalBlock: async () => { console.log("removeProfessionalBlock called"); },
         fetchProfessionalBlocks: async () => { console.log("fetchProfessionalBlocks called"); return []; },
         fetchServiceProfessionals,
+        fetchPlans,
+        addPlan,
+        updatePlan,
+        deletePlan,
         isAuthenticated,
         googleCalendarConnected,
         toggleGoogleCalendar: () => setGoogleCalendarConnected(!googleCalendarConnected),

@@ -17,11 +17,14 @@ import Settings from "./pages/admin/Settings";
 import WhatsappSettings from "./pages/admin/WhatsappSettings";
 import Clients from "./pages/admin/Clients";
 import Professionals from "./pages/admin/Professionals";
-import Reminders from "./pages/admin/Reminders"; // Nova página de lembretes
+import Reminders from "./pages/admin/Reminders";
+import Plans from "./pages/admin/Plans"; // Nova página de planos
+import Billing from "./pages/manager/Billing"; // Nova página de billing
 import BusinessPage from "./pages/BusinessPage";
 import { AppProvider } from "./store";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { AdminRoute } from "./components/AdminRoute";
+import { BillingGuard } from "./components/BillingGuard"; // Importar o guard
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -51,112 +54,25 @@ const AppRoutes: React.FC = () => {
       <Route path="/barbearia-do-ze" element={<Navigate to="/p/barbearia-do-ze" replace />} />
 
       {/* --- Platform Admin Routes (Super Admin) --- */}
-      <Route
-        path="/admin"
-        element={
-          <AdminRoute>
-            <PlatformDashboard />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/businesses"
-        element={
-          <AdminRoute>
-            <Businesses />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/users"
-        element={
-          <AdminRoute>
-            <Users />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/users/new"
-        element={
-          <AdminRoute>
-            <UserForm />
-          </AdminRoute>
-        }
-      />
-      <Route
-        path="/admin/reports"
-        element={
-          <AdminRoute>
-            <Reports />
-          </AdminRoute>
-        }
-      />
+      <Route path="/admin" element={<AdminRoute><PlatformDashboard /></AdminRoute>} />
+      <Route path="/admin/businesses" element={<AdminRoute><Businesses /></AdminRoute>} />
+      <Route path="/admin/users" element={<AdminRoute><Users /></AdminRoute>} />
+      <Route path="/admin/users/new" element={<AdminRoute><UserForm /></AdminRoute>} />
+      <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+      <Route path="/admin/plans" element={<AdminRoute><Plans /></AdminRoute>} />
 
       {/* --- Business Manager Routes (Owner/Professional) --- */}
-      <Route
-        path="/manager"
-        element={
-          <PrivateRoute>
-            <Dashboard />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/manager/calendar"
-        element={
-          <PrivateRoute>
-            <Schedule />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/manager/clients"
-        element={
-          <PrivateRoute>
-            <Clients />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/manager/services"
-        element={
-          <PrivateRoute>
-            <Services />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/manager/professionals"
-        element={
-          <PrivateRoute>
-            <Professionals />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/manager/whatsapp"
-        element={
-          <PrivateRoute>
-            <WhatsappSettings />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/manager/settings"
-        element={
-          <PrivateRoute>
-            <Settings />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/manager/reminders"
-        element={
-          <PrivateRoute>
-            <Reminders />
-          </PrivateRoute>
-        }
-      />
+      <Route path="/manager" element={<PrivateRoute><BillingGuard><Dashboard /></BillingGuard></PrivateRoute>} />
+      <Route path="/manager/calendar" element={<PrivateRoute><BillingGuard><Schedule /></BillingGuard></PrivateRoute>} />
+      <Route path="/manager/clients" element={<PrivateRoute><BillingGuard><Clients /></BillingGuard></PrivateRoute>} />
+      <Route path="/manager/services" element={<PrivateRoute><BillingGuard><Services /></BillingGuard></PrivateRoute>} />
+      <Route path="/manager/professionals" element={<PrivateRoute><BillingGuard><Professionals /></BillingGuard></PrivateRoute>} />
+      <Route path="/manager/whatsapp" element={<PrivateRoute><BillingGuard><WhatsappSettings /></BillingGuard></PrivateRoute>} />
+      <Route path="/manager/settings" element={<PrivateRoute><BillingGuard><Settings /></BillingGuard></PrivateRoute>} />
+      <Route path="/manager/reminders" element={<PrivateRoute><BillingGuard><Reminders /></BillingGuard></PrivateRoute>} />
+      
+      {/* Billing page is guarded by PrivateRoute but not BillingGuard itself */}
+      <Route path="/manager/billing" element={<PrivateRoute><Billing /></PrivateRoute>} />
     </Routes>
   );
 };

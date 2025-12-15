@@ -9,7 +9,8 @@ import {
   Store,
   Users,
   MessageCircle,
-  Bell
+  Bell,
+  CreditCard
 } from "lucide-react";
 import { useApp } from "../store";
 import { useAuth } from "../context/AuthContext";
@@ -19,7 +20,7 @@ export const ManagerSidebar: React.FC = () => {
   const { logout, currentBusiness } = useApp();
   const { user } = useAuth();
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => location.pathname.startsWith(path);
 
   // Business Manager Items
   const navItems = [
@@ -30,6 +31,7 @@ export const ManagerSidebar: React.FC = () => {
     { path: "/manager/services", label: "Serviços", icon: Scissors },
     { path: "/manager/reminders", label: "Lembretes", icon: Bell },
     { path: "/manager/whatsapp", label: "WhatsApp API", icon: MessageCircle },
+    { path: "/manager/billing", label: "Assinatura", icon: CreditCard },
     { path: "/manager/settings", label: "Configurações", icon: Settings },
   ];
 

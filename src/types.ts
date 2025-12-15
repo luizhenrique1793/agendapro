@@ -13,6 +13,16 @@ export interface ReminderConfig {
   same_day_hours_before: number; // Quantas horas antes no mesmo dia
 }
 
+export interface Plan {
+  id: string;
+  name: string;
+  price_cents: number;
+  description?: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Business {
   id: string;
   name: string;
@@ -40,4 +50,8 @@ export interface Business {
   assistant_config?: any; // Nova configuração do Agente IA
   reminder_config?: ReminderConfig; // Nova configuração de lembretes
   timezone?: string;
+  trial_started_at?: string;
+  trial_ends_at?: string;
+  billing_status?: 'trial' | 'active' | 'payment_pending' | 'blocked';
+  payment_due_at?: string;
 }
