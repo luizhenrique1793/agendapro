@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { AdminSidebar } from "../../components/AdminSidebar";
 import { useApp } from "../../store";
-import { PlusCircle, Search, Edit2, ChevronLeft, ChevronRight, Copy, CheckCircle2, Loader2, Bell, Filter } from "lucide-react";
+import { PlusCircle, Search, Edit2, ChevronLeft, ChevronRight, Copy, CheckCircle2, Loader2, Bell, Filter, Trash2 } from "lucide-react";
 import { Business } from "../../types";
 import BusinessFormModal from "./BusinessFormModal";
 
@@ -42,7 +42,7 @@ const getBillingStatusPill = (status: string | undefined) => {
 };
 
 const Businesses: React.FC = () => {
-  const { businesses, adminUpdateBusiness, adminCreateBusiness, loading } = useApp();
+  const { businesses, adminUpdateBusiness, adminCreateBusiness, deleteBusiness, loading } = useApp();
   
   const [searchTerm, setSearchTerm] = useState("");
   const [planFilter, setPlanFilter] = useState("all");
@@ -94,6 +94,17 @@ const Businesses: React.FC = () => {
       alert("Erro ao salvar negócio.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeleteBusiness = async (id: string) => {
+    if (window.confirm("Tem certeza que deseja excluir este negócio? Todos os dados relacionados serão perdidos.")) {
+      try {
+        await deleteBusiness(id);
+      } catch (error) {
+        console.error("Failed to delete business:", error);
+        alert("Erro ao excluir negócio.");
+      }
     }
   };
 
@@ -209,6 +220,7 @@ const Businesses: React.FC = () => {
                         <option value="trial">Em Teste</option>
                       </select>
                       <button onClick={() => handleOpenModal(business)} className="text-primary-600 hover:text-primary-900" title="Editar"><Edit2 className="h-5 w-5" /></button>
+                      <button onClick={() => handleDeleteBusiness(business.id)} className="text-red-600 hover:text-red-900" title="Excluir"><Trash2 className="h-5 w-5" /></button>
                     </div>
                   </td>
                 </tr>

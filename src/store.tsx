@@ -16,7 +16,8 @@ interface AppContextType {
   updateBusiness: (business: Partial<Business>) => Promise<void>;
   adminUpdateBusiness: (business: Partial<Business>) => Promise<void>;
   adminCreateBusiness: (businessData: Partial<Business>) => Promise<void>;
-  requestBusinessActivation: () => Promise<void>; // Nova função para solicitar ativação
+  deleteBusiness: (id: string) => Promise<void>; // Adicionado
+  requestBusinessActivation: () => Promise<void>;
   addAppointment: (appt: Omit<Appointment, "id" | "created_at">) => Promise<void>;
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
   updateAppointmentReminderSent: (id: string, sent: boolean) => Promise<void>;
@@ -94,6 +95,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (role === 'admin') {
         const { data } = await supabase.from('businesses').select('*');
         setBusinesses(data || []);
+        const { data: usersData } = await supabase.from('users').select('*');
+        setUsers(usersData || []);
       } else if (user) {
         const { data: userData } = await supabase.from('users').select('business_id').eq('id', user.id).single();
         if (userData?.business_id) {
@@ -169,6 +172,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .insert([{ ...businessData, slug, status: businessData.status || 'Ativo' }]);
       if (error) throw error;
       await fetchData();
+  };
+
+  const deleteBusiness = async (id: string) => {
+    const { error } = await supabase.from('businesses').delete().eq('id', id);
+    if (error) throw error;
+    await fetchData();
   };
 
   // Nova função para o gerente solicitar a ativação manual
@@ -429,6 +438,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateBusiness,
         adminUpdateBusiness,
         adminCreateBusiness,
+        deleteBusiness, // Adicionado
         requestBusinessActivation,
         addService,
         updateService,
@@ -448,7 +458,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateClient: () => { console.log("updateClient called"); },
         deleteClient: () => { console.log("deleteClient called"); },
         addProfessionalBlock,
-        removeProfessionalBlock: async () => { console.log("removeProfessionalBlock called"); },
+        removeProfessionalBlock: async () => { console.log("removeProfessionalBlock called"); return []; },
         fetchProfessionalBlocks: async () => { console.log("fetchProfessionalBlocks called"); return []; },
         fetchServiceProfessionals,
         fetchPlans,
