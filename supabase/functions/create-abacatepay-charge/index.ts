@@ -21,7 +21,7 @@ serve(async (req) => {
     // 1. Buscar dados do negócio, do plano e do dono
     const { data: business, error: businessError } = await supabaseAdmin
       .from('businesses')
-      .select('id, plan')
+      .select('id, plan, phone')
       .eq('id', business_id)
       .single();
 
@@ -31,7 +31,7 @@ serve(async (req) => {
 
     const { data: plan, error: planError } = await supabaseAdmin
       .from('plans')
-      .select('price_cents, name')
+      .select('id, price_cents, name')
       .eq('name', business.plan)
       .single();
 
@@ -43,7 +43,7 @@ serve(async (req) => {
         .from('users')
         .select('name, email')
         .eq('business_id', business_id)
-        .eq('role', 'Dono') // Assumindo que 'Dono' é a role do proprietário
+        .eq('role', 'Dono')
         .limit(1)
         .single();
 
@@ -51,25 +51,34 @@ serve(async (req) => {
         throw new Error("Dono do negócio não encontrado para criar a cobrança.");
     }
 
-    // 2. Criar cobrança na AbacatePay
-    // A chave de API está hardcoded para testes, conforme solicitado.
-    // Em produção, use Deno.env.get('ABACATEPAY_API_KEY') e configure o segredo no Supabase.
+    // 2. Criar cobrança/checkout na AbacatePay
     const abacateApiKey = 'abc_dev_cHnk2MfPmKabztKWSCNEys3K';
     if (!abacateApiKey) throw new Error("Chave da API AbacatePay não configurada.");
 
-    const chargePayload = {
-      value: plan.price_cents,
-      charge_type: "one_time",
-      payment_method: "pix",
-      description: `Assinatura AgendaPro - Plano ${plan.name}`,
-      customer: {
-        name: owner.name,
-        email: owner.email,
-      }
-    };
+    // URL correta da API de sandbox da AbacatePay para criar um checkout
+    const abacateApiUrl = 'https://sandbox.abacatepay.com/api/v1/billing/create';
 
-    // URL da API de sandbox da AbacatePay
-    const abacateApiUrl = 'https://sandbox.abacatepay.com.br/api/v1/charges';
+    const checkoutPayload = {
+      frequency: "ONE_TIME",
+      methods: ["PIX", "CREDIT_CARD"],
+      products: [
+        {
+          externalId: plan.id,
+          name: `AgendaPro - Plano ${plan.name}`,
+          quantity: 1,
+          price: plan.price_cents
+        }
+      ],
+      returnUrl: `${Deno.env.get('NEXT_PUBLIC_APP_URL') || 'http://localhost:3000'}/#/manager/billing`,
+      completionUrl: `${Deno.env.get('NEXT_PUBLIC_APP_URL') || 'http://localhost:3000'}/#/manager/billing`,
+      customer: {
+        email: owner.email,
+        cellphone: business.phone?.replace(/\D/g, '') || '',
+        name: owner.name,
+      },
+      allowCoupons: false,
+      externalId: `agendapro-${business_id}-${Date.now()}`,
+    };
 
     const abacateResponse = await fetch(abacateApiUrl, {
       method: 'POST',
@@ -77,7 +86,7 @@ serve(async (req) => {
         'Authorization': `Bearer ${abacateApiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(chargePayload)
+      body: JSON.stringify(checkoutPayload)
     });
 
     if (!abacateResponse.ok) {
@@ -88,17 +97,19 @@ serve(async (req) => {
     
     const chargeData = await abacateResponse.json();
 
+    if (!chargeData.checkout_url) {
+        throw new Error("A resposta da AbacatePay não continha uma URL de checkout.");
+    }
+
     // 3. Salvar cobrança no banco de dados
     const { data: payment, error: paymentInsertError } = await supabaseAdmin
       .from('business_payments')
       .insert({
         business_id: business_id,
         billing_id: chargeData.id,
-        status: chargeData.status.toUpperCase(),
+        status: 'PENDING',
         amount_cents: plan.price_cents,
-        payment_url: chargeData.payment_url,
-        pix_qr_code: chargeData.payment_info?.qr_code_url,
-        pix_emv: chargeData.payment_info?.qr_code,
+        payment_url: chargeData.checkout_url,
       })
       .select()
       .single();
@@ -120,7 +131,7 @@ serve(async (req) => {
     console.error("Erro na função create-abacatepay-charge:", err);
     return new Response(JSON.stringify({ success: false, error: err.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200, // Retornar 200 para o frontend tratar o erro de negócio
+      status: 200,
     });
   }
 });

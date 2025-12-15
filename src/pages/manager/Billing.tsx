@@ -3,13 +3,12 @@ import { ManagerSidebar } from '../../components/ManagerSidebar';
 import { useApp } from '../../store';
 import { supabase } from '../../lib/supabase';
 import { Plan } from '../../types';
-import { CreditCard, Loader2, CheckCircle, AlertTriangle, Copy, QrCode } from 'lucide-react';
+import { CreditCard, Loader2, CheckCircle, AlertTriangle, QrCode } from 'lucide-react';
 
 const Billing: React.FC = () => {
   const { currentBusiness, plans, updateBusiness, loading: appLoading } = useApp();
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [paymentInfo, setPaymentInfo] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,14 +31,13 @@ const Billing: React.FC = () => {
     }
   };
 
-  const handleGeneratePix = async () => {
+  const handleGenerateCheckout = async () => {
     if (!currentBusiness?.id) {
       setError("ID do negócio não encontrado.");
       return;
     }
     setIsGenerating(true);
     setError(null);
-    setPaymentInfo(null);
 
     try {
       const { data, error: funcError } = await supabase.functions.invoke('create-abacatepay-charge', {
@@ -49,17 +47,16 @@ const Billing: React.FC = () => {
       if (funcError) throw new Error(funcError.message);
       if (!data.success) throw new Error(data.error || "Erro desconhecido ao gerar cobrança.");
 
-      setPaymentInfo(data.payment);
+      if (data.payment?.payment_url) {
+        window.location.href = data.payment.payment_url;
+      } else {
+        throw new Error("URL de checkout não recebida.");
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
       setIsGenerating(false);
     }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    alert('Código PIX copiado!');
   };
 
   const trialDaysRemaining = () => {
@@ -114,30 +111,15 @@ const Billing: React.FC = () => {
               </div>
 
               {/* Payment Area */}
-              {isBlocked && !paymentInfo && (
+              {isBlocked && (
                 <div className="bg-white p-6 rounded-xl shadow-sm border">
                   <h2 className="font-bold text-lg mb-2">Ativar Assinatura</h2>
-                  <p className="text-sm text-gray-600 mb-4">Seu plano selecionado é o <strong>{selectedPlan?.name || 'Nenhum'}</strong>. Clique no botão abaixo para gerar um PIX e ativar sua conta.</p>
-                  <button onClick={handleGeneratePix} disabled={isGenerating || !selectedPlan} className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white font-semibold py-3 rounded-lg hover:bg-primary-700 disabled:opacity-50">
-                    {isGenerating ? <Loader2 className="animate-spin" /> : <QrCode />}
-                    Gerar PIX para Ativar
+                  <p className="text-sm text-gray-600 mb-4">Seu plano selecionado é o <strong>{selectedPlan?.name || 'Nenhum'}</strong>. Clique no botão abaixo para ir para a página de pagamento e ativar sua conta.</p>
+                  <button onClick={handleGenerateCheckout} disabled={isGenerating || !selectedPlan} className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white font-semibold py-3 rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                    {isGenerating ? <Loader2 className="animate-spin" /> : <CreditCard />}
+                    Ir para Pagamento
                   </button>
                   {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-                </div>
-              )}
-
-              {paymentInfo && (
-                <div className="bg-white p-6 rounded-xl shadow-sm border">
-                  <h2 className="font-bold text-lg mb-4">Pagamento PIX</h2>
-                  <div className="flex flex-col items-center">
-                    <img src={paymentInfo.pix_qr_code} alt="QR Code PIX" className="w-48 h-48 border rounded-lg" />
-                    <p className="text-sm text-gray-600 mt-4">Aponte a câmera do seu celular para o QR Code ou use o "Copia e Cola".</p>
-                    <div className="w-full bg-gray-100 p-2 rounded-lg mt-4 relative">
-                      <p className="text-xs text-gray-800 break-all pr-10">{paymentInfo.pix_emv}</p>
-                      <button onClick={() => copyToClipboard(paymentInfo.pix_emv)} className="absolute top-2 right-2 p-1 bg-gray-200 rounded hover:bg-gray-300"><Copy size={14} /></button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-4">Aguardando pagamento... O sistema será liberado automaticamente após a confirmação.</p>
-                  </div>
                 </div>
               )}
             </div>
