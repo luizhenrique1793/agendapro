@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { ManagerSidebar } from "../../components/ManagerSidebar";
 import { useApp } from "../../store";
-import { Save, Loader2, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
+import { Save, Loader2, CheckCircle, AlertCircle, RefreshCw, Check } from "lucide-react";
 
 // Types
 interface FormData {
@@ -170,18 +170,19 @@ const BusinessInfoSection: React.FC<{
       />
 
       <FormInput
-        label="Telefone Principal"
+        label="WhatsApp Principal (para cobrança e contato)"
         type="tel"
         value={formData.phone}
-        onChange={(value) => updateFormData({ phone: value })}
+        onChange={(value) => updateFormData({ phone: value.replace(/\D/g, '') })} // Normaliza para salvar apenas dígitos
         disabled={disabled}
+        placeholder="5511999999999"
       />
 
       <FormInput
         label="Telefone Secundário (opcional)"
         type="tel"
         value={formData.secondary_phone}
-        onChange={(value) => updateFormData({ secondary_phone: value })}
+        onChange={(value) => updateFormData({ secondary_phone: value.replace(/\D/g, '') })} // Normaliza
         disabled={disabled}
       />
 
@@ -516,7 +517,7 @@ const PaymentMethodsSection: React.FC<{
                   ? 'border-primary-500 bg-primary-500' 
                   : 'border-gray-300 bg-white'
               }`}>
-                {isSelected && <CheckCircle className="w-4 h-4 text-white" />}
+                {isSelected && <Check className="w-4 h-4 text-white" />}
               </div>
             </button>
           );

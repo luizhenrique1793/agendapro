@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { ManagerSidebar } from '../../components/ManagerSidebar';
 import { useApp } from '../../store';
-import { supabase } from '../../lib/supabase';
 import { Plan } from '../../types';
-import { CreditCard, Loader2, CheckCircle, AlertTriangle, QrCode } from 'lucide-react';
+import { CreditCard, Loader2, CheckCircle, AlertTriangle, Send, Info } from 'lucide-react';
 
 const Billing: React.FC = () => {
-  const { currentBusiness, plans, updateBusiness, loading: appLoading } = useApp();
+  const { currentBusiness, plans, updateBusiness, requestBusinessActivation, loading: appLoading } = useApp();
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isRequesting, setIsRequesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,31 +30,18 @@ const Billing: React.FC = () => {
     }
   };
 
-  const handleGenerateCheckout = async () => {
-    if (!currentBusiness?.id) {
-      setError("ID do negócio não encontrado.");
+  const handleRequestActivation = async () => {
+    if (!window.confirm("Isso enviará uma notificação para nossa equipe analisar seu pedido de liberação. Deseja continuar?")) {
       return;
     }
-    setIsGenerating(true);
+    setIsRequesting(true);
     setError(null);
-
     try {
-      const { data, error: funcError } = await supabase.functions.invoke('create-abacatepay-charge', {
-        body: { business_id: currentBusiness.id }
-      });
-
-      if (funcError) throw new Error(funcError.message);
-      if (!data.success) throw new Error(data.error || "Erro desconhecido ao gerar cobrança.");
-
-      if (data.payment?.payment_url) {
-        window.location.href = data.payment.payment_url;
-      } else {
-        throw new Error("URL de checkout não recebida.");
-      }
+      await requestBusinessActivation();
     } catch (e: any) {
-      setError(e.message);
+      setError('Erro ao solicitar liberação: ' + e.message);
     } finally {
-      setIsGenerating(false);
+      setIsRequesting(false);
     }
   };
 
@@ -66,11 +52,41 @@ const Billing: React.FC = () => {
   };
 
   const isTrialActive = currentBusiness?.billing_status === 'trial' && trialDaysRemaining() > 0;
-  const isBlocked = !isTrialActive && currentBusiness?.billing_status !== 'active';
+  const isPending = currentBusiness?.billing_status === 'payment_pending';
+  const hasRequested = !!currentBusiness?.activation_requested_at;
 
   if (appLoading) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin h-8 w-8" /></div>;
   }
+
+  const renderStatusSpecificContent = () => {
+    if (isPending) {
+      return (
+        <div className="bg-white p-6 rounded-xl shadow-sm border">
+          <h2 className="font-bold text-lg mb-2 flex items-center gap-2">
+            <Send className="text-primary-600" /> Ativar Assinatura
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Seu período de testes terminou. Para continuar usando o sistema, solicite a liberação manual para nossa equipe.
+          </p>
+          {hasRequested ? (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
+              <CheckCircle className="mx-auto h-8 w-8 text-blue-500 mb-2" />
+              <h3 className="font-semibold text-blue-800">Pedido de liberação enviado!</h3>
+              <p className="text-sm text-blue-700">Nossa equipe está analisando seu pedido. A liberação ocorrerá em breve.</p>
+            </div>
+          ) : (
+            <button onClick={handleRequestActivation} disabled={isRequesting} className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white font-semibold py-3 rounded-lg hover:bg-primary-700 disabled:opacity-50">
+              {isRequesting ? <Loader2 className="animate-spin" /> : <Send />}
+              Solicitar Liberação Manual
+            </button>
+          )}
+          {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -80,10 +96,10 @@ const Billing: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Assinatura e Pagamento</h1>
           <p className="text-gray-500 mb-8">Gerencie seu plano e pagamentos do AgendaPro.</p>
 
-          {isBlocked && (
+          {isPending && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
-              <h3 className="font-bold flex items-center gap-2"><AlertTriangle /> Acesso Bloqueado</h3>
-              <p>Seu período de testes terminou. Para continuar usando o sistema, por favor, realize o pagamento da sua assinatura.</p>
+              <h3 className="font-bold flex items-center gap-2"><AlertTriangle /> Conta Pendente</h3>
+              <p>Sua conta está com o pagamento pendente. Solicite a liberação para continuar usando todas as funcionalidades.</p>
             </div>
           )}
 
@@ -104,29 +120,18 @@ const Billing: React.FC = () => {
                         R$ {(plan.price_cents / 100).toFixed(2)} <span className="text-sm font-normal text-gray-500">/mês</span>
                       </p>
                       <p className="text-xs text-gray-500">{plan.description}</p>
-                      {selectedPlan?.id === plan.id && <div className="mt-3 text-xs font-bold text-primary-600 flex items-center gap-1"><CheckCircle size={14} /> Plano Atual</div>}
+                      {selectedPlan?.id === plan.id && <div className="mt-3 text-xs font-bold text-primary-600 flex items-center gap-1"><CheckCircle size={14} /> Plano Selecionado</div>}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Payment Area */}
-              {isBlocked && (
-                <div className="bg-white p-6 rounded-xl shadow-sm border">
-                  <h2 className="font-bold text-lg mb-2">Ativar Assinatura</h2>
-                  <p className="text-sm text-gray-600 mb-4">Seu plano selecionado é o <strong>{selectedPlan?.name || 'Nenhum'}</strong>. Clique no botão abaixo para ir para a página de pagamento e ativar sua conta.</p>
-                  <button onClick={handleGenerateCheckout} disabled={isGenerating || !selectedPlan} className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white font-semibold py-3 rounded-lg hover:bg-primary-700 disabled:opacity-50">
-                    {isGenerating ? <Loader2 className="animate-spin" /> : <CreditCard />}
-                    Ir para Pagamento
-                  </button>
-                  {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-                </div>
-              )}
+              {renderStatusSpecificContent()}
             </div>
 
             {/* Status Card */}
             <div className="bg-white p-6 rounded-xl shadow-sm border h-fit">
-              <h2 className="font-bold text-lg mb-4 flex items-center gap-2"><CreditCard /> Status da Conta</h2>
+              <h2 className="font-bold text-lg mb-4 flex items-center gap-2"><Info /> Status da Conta</h2>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Status:</span>

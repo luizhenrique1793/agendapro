@@ -16,6 +16,7 @@ interface AppContextType {
   updateBusiness: (business: Partial<Business>) => Promise<void>;
   adminUpdateBusiness: (business: Partial<Business>) => Promise<void>;
   adminCreateBusiness: (businessData: Partial<Business>) => Promise<void>;
+  requestBusinessActivation: () => Promise<void>; // Nova função para solicitar ativação
   addAppointment: (appt: Omit<Appointment, "id" | "created_at">) => Promise<void>;
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => Promise<void>;
   updateAppointmentReminderSent: (id: string, sent: boolean) => Promise<void>;
@@ -168,6 +169,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .insert([{ ...businessData, slug, status: businessData.status || 'Ativo' }]);
       if (error) throw error;
       await fetchData();
+  };
+
+  // Nova função para o gerente solicitar a ativação manual
+  const requestBusinessActivation = async () => {
+    if (!currentBusiness?.id) throw new Error("Negócio não identificado.");
+    
+    const { error } = await supabase
+      .from('businesses')
+      .update({ activation_requested_at: new Date().toISOString() })
+      .eq('id', currentBusiness.id);
+
+    if (error) throw error;
+    
+    // Recarrega os dados para refletir a mudança na UI
+    await fetchData();
   };
 
   const updateServiceProfessionals = async (serviceId: string, professionalIds: string[]) => {
@@ -413,6 +429,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateBusiness,
         adminUpdateBusiness,
         adminCreateBusiness,
+        requestBusinessActivation,
         addService,
         updateService,
         deleteService,

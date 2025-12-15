@@ -1,17 +1,16 @@
 import React, { useState } from "react";
 import { AdminSidebar } from "../../components/AdminSidebar";
 import { useApp } from "../../store";
-import { PlusCircle, Search, Edit2, Power, ChevronLeft, ChevronRight, Copy, CheckCircle2, Loader2 } from "lucide-react";
+import { PlusCircle, Search, Edit2, ChevronLeft, ChevronRight, Copy, CheckCircle2, Loader2, Bell, Filter } from "lucide-react";
 import { Business } from "../../types";
 import BusinessFormModal from "./BusinessFormModal";
 
-const CopyLinkButton: React.FC<{ slug: string }> = ({ slug }) => {
+const CopyButton: React.FC<{ text: string }> = ({ text }) => {
   const [copied, setCopied] = useState(false);
-  const link = `${window.location.origin}/#/book/${slug}`;
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(link);
+    navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -19,24 +18,24 @@ const CopyLinkButton: React.FC<{ slug: string }> = ({ slug }) => {
   return (
     <button
       onClick={handleCopy}
-      className="flex items-center gap-2 rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200"
+      className="flex items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200"
     >
       {copied ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
-      {copied ? "Copiado" : "Copiar Link"}
+      {copied ? "Copiado" : text}
     </button>
   );
 };
 
-const getSubscriptionStatusPill = (status: string | undefined) => {
+const getBillingStatusPill = (status: string | undefined) => {
   switch (status) {
     case 'active':
-      return <span className="bg-green-100 text-green-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">Ativa</span>;
-    case 'trialing':
+      return <span className="bg-green-100 text-green-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">Ativo</span>;
+    case 'trial':
       return <span className="bg-blue-100 text-blue-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">Em Teste</span>;
-    case 'past_due':
+    case 'payment_pending':
       return <span className="bg-yellow-100 text-yellow-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">Pendente</span>;
-    case 'canceled':
-      return <span className="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">Cancelada</span>;
+    case 'blocked':
+        return <span className="bg-red-100 text-red-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">Bloqueado</span>;
     default:
       return <span className="bg-gray-100 text-gray-800 text-xs font-medium me-2 px-2.5 py-0.5 rounded-full">N/A</span>;
   }
@@ -46,9 +45,9 @@ const Businesses: React.FC = () => {
   const { businesses, adminUpdateBusiness, adminCreateBusiness, loading } = useApp();
   
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
   const [planFilter, setPlanFilter] = useState("all");
-  const [subscriptionStatusFilter, setSubscriptionStatusFilter] = useState("all");
+  const [billingStatusFilter, setBillingStatusFilter] = useState("all");
+  const [showOnlyRequests, setShowOnlyRequests] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Partial<Business> | null>(null);
@@ -59,10 +58,10 @@ const Businesses: React.FC = () => {
 
   const filteredBusinesses = businesses.filter(business => {
     const matchesSearch = business.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || business.status === statusFilter;
     const matchesPlan = planFilter === 'all' || business.plan === planFilter;
-    const matchesSubscription = subscriptionStatusFilter === 'all' || business.subscription_status === subscriptionStatusFilter;
-    return matchesSearch && matchesStatus && matchesPlan && matchesSubscription;
+    const matchesBillingStatus = billingStatusFilter === 'all' || business.billing_status === billingStatusFilter;
+    const matchesActivationRequest = !showOnlyRequests || (business.activation_requested_at && business.billing_status === 'payment_pending');
+    return matchesSearch && matchesPlan && matchesBillingStatus && matchesActivationRequest;
   });
 
   const totalPages = Math.ceil(filteredBusinesses.length / itemsPerPage);
@@ -98,11 +97,13 @@ const Businesses: React.FC = () => {
     }
   };
 
-  const handleToggleStatus = async (business: Business) => {
-    const newStatus = business.status === 'Ativo' ? 'Inativo' : 'Ativo';
-    if (window.confirm(`Tem certeza que deseja alterar o status de "${business.name}" para ${newStatus}?`)) {
-      await adminUpdateBusiness({ id: business.id, status: newStatus });
+  const handleStatusChange = async (businessId: string, newStatus: string) => {
+    const updatePayload: Partial<Business> = { id: businessId, billing_status: newStatus as any };
+    // Limpa o pedido de ativação ao aprovar (mudar para 'active')
+    if (newStatus === 'active') {
+        updatePayload.activation_requested_at = null;
     }
+    await adminUpdateBusiness(updatePayload);
   };
 
   return (
@@ -145,27 +146,34 @@ const Businesses: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-900">Status Assinatura</label>
-              <select value={subscriptionStatusFilter} onChange={e => setSubscriptionStatusFilter(e.target.value)} className="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-primary-500">
-                <option value="all">Todos os Status</option>
-                <option value="active">Ativa</option>
-                <option value="trialing">Em Teste</option>
-                <option value="past_due">Pendente</option>
-                <option value="canceled">Cancelada</option>
+              <label className="mb-2 block text-sm font-medium text-gray-900">Status Cobrança</label>
+              <select value={billingStatusFilter} onChange={e => setBillingStatusFilter(e.target.value)} className="block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-sm text-gray-900 focus:border-primary-500 focus:ring-primary-500">
+                <option value="all">Todos</option>
+                <option value="active">Ativo</option>
+                <option value="trial">Em Teste</option>
+                <option value="payment_pending">Pendente</option>
+                <option value="blocked">Bloqueado</option>
               </select>
             </div>
           </div>
+          <div className="mt-4 border-t pt-4">
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" checked={showOnlyRequests} onChange={() => setShowOnlyRequests(!showOnlyRequests)} className="sr-only peer" />
+              <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-orange-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+              <span className="ml-3 text-sm font-medium text-gray-900 flex items-center gap-2"><Filter className="h-4 w-4" /> Mostrar apenas pedidos de liberação</span>
+            </label>
+          </div>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
           <table className="w-full text-left text-sm text-gray-500">
             <thead className="bg-gray-50 text-xs uppercase text-gray-700">
               <tr>
-                <th scope="col" className="px-6 py-3">Nome</th>
+                <th scope="col" className="px-6 py-3">Negócio</th>
+                <th scope="col" className="px-6 py-3">WhatsApp</th>
                 <th scope="col" className="px-6 py-3">Plano</th>
-                <th scope="col" className="px-6 py-3">Status Assinatura</th>
-                <th scope="col" className="px-6 py-3">Link Público</th>
-                <th scope="col" className="px-6 py-3">Status</th>
+                <th scope="col" className="px-6 py-3">Status Cobrança</th>
+                <th scope="col" className="px-6 py-3">Trial Termina em</th>
                 <th scope="col" className="px-6 py-3">Ações</th>
               </tr>
             </thead>
@@ -174,20 +182,33 @@ const Businesses: React.FC = () => {
                 <tr><td colSpan={6} className="text-center p-8"><Loader2 className="h-6 w-6 animate-spin mx-auto text-primary-600" /></td></tr>
               ) : paginatedBusinesses.map((business) => (
                 <tr key={business.id} className="border-b bg-white hover:bg-gray-50 last:border-0">
-                  <td className="whitespace-nowrap px-6 py-4 font-medium text-gray-900">{business.name}</td>
-                  <td className="px-6 py-4">{business.plan || 'N/A'}</td>
-                  <td className="px-6 py-4">{getSubscriptionStatusPill(business.subscription_status)}</td>
-                  <td className="px-6 py-4">{business.slug && <CopyLinkButton slug={business.slug} />}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center">
-                      <div className={`mr-2 h-2.5 w-2.5 rounded-full ${business.status === "Ativo" ? "bg-green-500" : "bg-red-500"}`}></div>
-                      {business.status}
+                  <td className="whitespace-nowrap px-6 py-4 font-medium text-gray-900">
+                    <div className="flex items-center gap-2">
+                      {business.name}
+                      {business.activation_requested_at && business.billing_status === 'payment_pending' && (
+                        <span className="bg-orange-100 text-orange-800 text-xs font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1" title={`Pedido em ${new Date(business.activation_requested_at).toLocaleString()}`}>
+                          <Bell className="h-3 w-3" /> Liberação Solicitada
+                        </span>
+                      )}
                     </div>
                   </td>
+                  <td className="px-6 py-4">{business.phone ? <CopyButton text={business.phone} /> : <span className="text-red-500 text-xs">N/A</span>}</td>
+                  <td className="px-6 py-4">{business.plan || 'N/A'}</td>
+                  <td className="px-6 py-4">{getBillingStatusPill(business.billing_status)}</td>
+                  <td className="px-6 py-4">{business.trial_ends_at ? new Date(business.trial_ends_at).toLocaleDateString('pt-BR') : 'N/A'}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
+                      <select
+                        value={business.billing_status || ''}
+                        onChange={(e) => handleStatusChange(business.id, e.target.value)}
+                        className="block w-full rounded-lg border border-gray-300 bg-gray-50 p-1.5 text-xs text-gray-900 focus:border-primary-500 focus:ring-primary-500"
+                      >
+                        <option value="active">Ativo</option>
+                        <option value="payment_pending">Pendente</option>
+                        <option value="blocked">Bloqueado</option>
+                        <option value="trial">Em Teste</option>
+                      </select>
                       <button onClick={() => handleOpenModal(business)} className="text-primary-600 hover:text-primary-900" title="Editar"><Edit2 className="h-5 w-5" /></button>
-                      <button onClick={() => handleToggleStatus(business)} className="text-gray-500 hover:text-red-600" title="Alterar Status"><Power className="h-5 w-5" /></button>
                     </div>
                   </td>
                 </tr>

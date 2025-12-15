@@ -24,7 +24,8 @@ const BusinessFormModal: React.FC<BusinessFormModalProps> = ({ isOpen, onClose, 
           type: 'Barbearia',
           plan: 'Básico',
           status: 'Ativo',
-          subscription_status: 'trialing'
+          subscription_status: 'trialing',
+          phone: ''
         });
       }
     }
@@ -62,6 +63,20 @@ const BusinessFormModal: React.FC<BusinessFormModalProps> = ({ isOpen, onClose, 
               value={formData.name || ''}
               onChange={handleChange}
               required
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">WhatsApp (para cobrança)</label>
+            <input
+              type="tel"
+              name="phone"
+              value={formData.phone || ''}
+              onChange={(e) => handleChange({
+                  ...e,
+                  target: { ...e.target, name: 'phone', value: e.target.value.replace(/\D/g, '') }
+              })}
+              placeholder="5511999999999"
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
             />
           </div>
@@ -108,17 +123,17 @@ const BusinessFormModal: React.FC<BusinessFormModalProps> = ({ isOpen, onClose, 
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Status da Assinatura</label>
+              <label className="block text-sm font-medium text-gray-700">Status da Cobrança</label>
               <select
-                name="subscription_status"
-                value={formData.subscription_status || 'trialing'}
+                name="billing_status"
+                value={formData.billing_status || 'trial'}
                 onChange={handleChange}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500"
               >
-                <option value="trialing">Em Teste</option>
+                <option value="trial">Em Teste</option>
                 <option value="active">Ativa</option>
-                <option value="past_due">Pendente</option>
-                <option value="canceled">Cancelada</option>
+                <option value="payment_pending">Pendente</option>
+                <option value="blocked">Bloqueada</option>
               </select>
             </div>
           </div>

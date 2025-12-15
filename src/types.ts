@@ -54,4 +54,6 @@ export interface Business {
   trial_ends_at?: string;
   billing_status?: 'trial' | 'active' | 'payment_pending' | 'blocked';
   payment_due_at?: string;
+  // Novo campo para rastrear quando um negócio solicitou a ativação manual
+  activation_requested_at?: string;
 }
